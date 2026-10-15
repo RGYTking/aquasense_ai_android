@@ -471,6 +471,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         loading: aiLoading,
         hasAnalysis: hasAnalysis,
         aiResult: aiResult,
+        onOpenAnalysis: () => setState(() => selectedIndex = 1),
       ),
       SamplesPage(
         samples: capturedSamples,
@@ -1147,11 +1148,12 @@ Future<void> _launchVideo(BuildContext context, String url) async {
   }
 }
 
-class SolutionsPage extends StatefulWidget {
+class SolutionsPage extends StatelessWidget {
   final WaterProfile profile;
   final double ph, tds, turbidity, flowRate;
   final bool connected, loading, hasAnalysis;
   final Map<String, dynamic>? aiResult;
+  final VoidCallback onOpenAnalysis;
 
   const SolutionsPage({
     super.key,
@@ -1164,46 +1166,13 @@ class SolutionsPage extends StatefulWidget {
     required this.loading,
     required this.hasAnalysis,
     required this.aiResult,
+    required this.onOpenAnalysis,
   });
-
-  @override
-  State<SolutionsPage> createState() => _SolutionsPageState();
-}
-
-class _SolutionsPageState extends State<SolutionsPage> {
-  String _searchQuery = '';
-  String _selectedCategory = 'All';
-
-  final List<String> _categories = const [
-    'All',
-    'High TDS',
-    'pH Balance',
-    'Turbidity',
-    'Microbial / UV',
-    'General Safety',
-  ];
 
   @override
   Widget build(BuildContext context) {
     const navy = Color(0xFF102A43);
     const teal = Color(0xFF087F8C);
-
-    final filteredTopics = solutionTopics.where((topic) {
-      final matchesCategory = _selectedCategory == 'All' ||
-          topic.category == _selectedCategory;
-      final matchesSearch = _searchQuery.isEmpty ||
-          topic.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          topic.simpleMeaning
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ||
-          topic.recommendedMethod
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ||
-          topic.filterOptions
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -1214,6 +1183,7 @@ class _SolutionsPageState extends State<SolutionsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Header Banner
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1248,70 +1218,11 @@ class _SolutionsPageState extends State<SolutionsPage> {
           ),
           const SizedBox(height: 16),
 
+          // Personalized AI Recommendation Card
           _buildPersonalizedAiCard(context),
           const SizedBox(height: 20),
 
-          const Text('Search Water Parameters & Solutions',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: navy)),
-          const SizedBox(height: 10),
-          TextField(
-            onChanged: (value) => setState(() => _searchQuery = value.trim()),
-            decoration: InputDecoration(
-              hintText: 'Search parameter, filter type (RO, UV, pH, TDS)...',
-              prefixIcon: const Icon(Icons.search, color: teal),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => setState(() => _searchQuery = ''),
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFDCE8EE)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFDCE8EE)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _categories.map((cat) {
-                final isSelected = _selectedCategory == cat;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(cat),
-                    selected: isSelected,
-                    selectedColor: teal,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : navy,
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    backgroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFFDCE8EE)),
-                    onSelected: (selected) {
-                      if (selected) setState(() => _selectedCategory = cat);
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 20),
-
+          // Parameter Guides Header
           const Text('Detailed Water Quality Guides',
               style: TextStyle(
                   fontSize: 18,
@@ -1319,22 +1230,11 @@ class _SolutionsPageState extends State<SolutionsPage> {
                   color: navy)),
           const SizedBox(height: 10),
 
-          if (filteredTopics.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text(
-                  'No matching water quality topics found. Try clearing your search filter.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.black54),
-                ),
-              ),
-            )
-          else
-            ...filteredTopics.map((topic) => _buildTopicCard(topic)),
+          ...solutionTopics.map((topic) => _buildTopicCard(topic)),
 
           const SizedBox(height: 24),
 
+          // "Learn with Videos" Section
           Row(
             children: const [
               Icon(Icons.video_library_outlined, color: teal, size: 24),
@@ -1353,10 +1253,11 @@ class _SolutionsPageState extends State<SolutionsPage> {
           ),
           const SizedBox(height: 12),
 
-          ...educationalVideos.map((video) => _buildVideoCard(video)),
+          ...educationalVideos.map((video) => _buildVideoCard(context, video)),
 
           const SizedBox(height: 24),
 
+          // Laboratory Disclaimer Card
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -1400,7 +1301,7 @@ class _SolutionsPageState extends State<SolutionsPage> {
   }
 
   Widget _buildPersonalizedAiCard(BuildContext context) {
-    if (!widget.connected) {
+    if (!connected) {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -1430,30 +1331,29 @@ class _SolutionsPageState extends State<SolutionsPage> {
     final List<String> requiredTreatments = [];
     final List<String> reasoningList = [];
 
-    if (widget.tds > 300) {
+    if (tds > 300) {
       requiredTreatments.add('Reverse Osmosis (RO)');
       reasoningList.add(
-          'Elevated TDS (${widget.tds.toStringAsFixed(0)} ppm): RO membrane filtration is required to filter dissolved mineral salts and heavy metals.');
+          'Elevated TDS (${tds.toStringAsFixed(0)} ppm): RO membrane filtration is required to filter dissolved mineral salts and heavy metals.');
     }
-    if (widget.ph < 6.5) {
+    if (ph < 6.5) {
       requiredTreatments.add('Calcite Neutralizer');
       reasoningList.add(
-          'Acidic water (pH ${widget.ph.toStringAsFixed(1)}): Calcite neutralizer filter is recommended to raise pH and prevent pipe corrosion.');
-    } else if (widget.ph > 8.5) {
+          'Acidic water (pH ${ph.toStringAsFixed(1)}): Calcite neutralizer filter is recommended to raise pH and prevent pipe corrosion.');
+    } else if (ph > 8.5) {
       requiredTreatments.add('pH Adjustment / Acid Dosing');
       reasoningList.add(
-          'High pH (${widget.ph.toStringAsFixed(1)}): Neutralizing treatment is recommended to prevent bitter taste and mineral scaling.');
+          'High pH (${ph.toStringAsFixed(1)}): Neutralizing treatment is recommended to prevent bitter taste and mineral scaling.');
     }
-    if (widget.turbidity > 1.0) {
+    if (turbidity > 1.0) {
       requiredTreatments.add('Multi-Stage Sediment Pre-Filter');
       reasoningList.add(
-          'High Turbidity (${widget.turbidity.toStringAsFixed(1)} NTU): Sediment pre-filtration (5μm -> 1μm) is needed to catch suspended silt and prevent membrane clogging.');
+          'High Turbidity (${turbidity.toStringAsFixed(1)} NTU): Sediment pre-filtration (5μm -> 1μm) is needed to catch suspended silt and prevent membrane clogging.');
     }
 
-    final safe = _isResultSafe(widget.aiResult);
+    final safe = _isResultSafe(aiResult);
     if (safe == false ||
-        (widget.hasAnalysis &&
-            _assessmentLabel(widget.aiResult) == 'UNSAFE')) {
+        (hasAnalysis && _assessmentLabel(aiResult) == 'UNSAFE')) {
       requiredTreatments.add('UV Disinfection / Boiling');
       reasoningList.add(
           'AI Assessment Unsafe: UV-C disinfection or boiling (3+ minutes) is required to neutralize microbial pathogens.');
@@ -1462,7 +1362,7 @@ class _SolutionsPageState extends State<SolutionsPage> {
     if (requiredTreatments.isEmpty) {
       requiredTreatments.add('Multi-Barrier Maintenance Filter');
       reasoningList.add(
-          'Active readings (pH ${widget.ph.toStringAsFixed(1)}, TDS ${widget.tds.toStringAsFixed(0)} ppm, Turbidity ${widget.turbidity.toStringAsFixed(1)} NTU) are within normal baseline ranges. Maintain standard sediment and carbon post-filters.');
+          'Active readings (pH ${ph.toStringAsFixed(1)}, TDS ${tds.toStringAsFixed(0)} ppm, Turbidity ${turbidity.toStringAsFixed(1)} NTU) are within normal baseline ranges. Maintain standard sediment and carbon post-filters.');
     }
 
     return Container(
@@ -1538,15 +1438,21 @@ class _SolutionsPageState extends State<SolutionsPage> {
                   ],
                 ),
               )),
-          if (widget.hasAnalysis && _recommendationText(widget.aiResult, '').isNotEmpty) ...[
+          if (hasAnalysis && _recommendationText(aiResult, '').isNotEmpty) ...[
             const Divider(height: 20),
             const Text('Backend Model Notes:',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 4),
-            Text(_recommendationText(widget.aiResult, ''),
+            Text(_recommendationText(aiResult, ''),
                 style: const TextStyle(
                     fontSize: 12, color: Colors.black87, height: 1.4)),
           ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onOpenAnalysis,
+            icon: const Icon(Icons.analytics_outlined),
+            label: const Text('View Detailed AI Analysis'),
+          ),
         ],
       ),
     );
@@ -1577,19 +1483,14 @@ class _SolutionsPageState extends State<SolutionsPage> {
           topic.category,
           style: TextStyle(fontSize: 12, color: topic.color, fontWeight: FontWeight.w600),
         ),
-        childrenPadding:
-            const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Divider(),
-          _detailSection(
-              'Simple Explanation', topic.simpleMeaning, Icons.info_outline),
-          _detailSection('Possible Causes', topic.possibleCauses,
-              Icons.search_outlined),
-          _detailSection('Health & Usability Concerns', topic.healthConcerns,
-              Icons.warning_amber_rounded),
-          _detailSection('Recommended Purification Method',
-              topic.recommendedMethod, Icons.build_outlined),
+          _detailSection('Simple Explanation', topic.simpleMeaning, Icons.info_outline),
+          _detailSection('Possible Causes', topic.possibleCauses, Icons.search_outlined),
+          _detailSection('Health & Usability Concerns', topic.healthConcerns, Icons.warning_amber_rounded),
+          _detailSection('Recommended Purification Method', topic.recommendedMethod, Icons.build_outlined),
 
           const SizedBox(height: 8),
           const Text('Step-by-Step Purification Process:',
@@ -1615,18 +1516,14 @@ class _SolutionsPageState extends State<SolutionsPage> {
                     const SizedBox(width: 8),
                     Expanded(
                         child: Text(e.value,
-                            style: const TextStyle(
-                                fontSize: 13, height: 1.4))),
+                            style: const TextStyle(fontSize: 13, height: 1.4))),
                   ],
                 ),
               )),
 
-          _detailSection('Suitable Filter Options', topic.filterOptions,
-              Icons.filter_alt_outlined),
-          _detailSection('Maintenance Instructions',
-              topic.maintenanceInstructions, Icons.cleaning_services_outlined),
-          _detailSection('When to Contact Certified Lab',
-              topic.whenToContactLab, Icons.science_outlined),
+          _detailSection('Suitable Filter Options', topic.filterOptions, Icons.filter_alt_outlined),
+          _detailSection('Maintenance Instructions', topic.maintenanceInstructions, Icons.cleaning_services_outlined),
+          _detailSection('When to Contact Certified Lab', topic.whenToContactLab, Icons.science_outlined),
         ],
       ),
     );
@@ -1653,14 +1550,13 @@ class _SolutionsPageState extends State<SolutionsPage> {
           ),
           const SizedBox(height: 3),
           Text(content,
-              style: const TextStyle(
-                  fontSize: 13, color: Colors.black87, height: 1.4)),
+              style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4)),
         ],
       ),
     );
   }
 
-  Widget _buildVideoCard(VideoItem video) {
+  Widget _buildVideoCard(BuildContext context, VideoItem video) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
@@ -1669,53 +1565,65 @@ class _SolutionsPageState extends State<SolutionsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.network(
-                  video.thumbnailUrl,
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 150,
-                    color: const Color(0xFF102A43),
-                    child: const Center(
-                      child: Icon(Icons.play_circle_fill,
-                          size: 50, color: Colors.white70),
+            Container(
+              height: 140,
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF102A43), Color(0xFF087F8C)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: .30),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.play_circle_fill, color: Colors.red, size: 16),
+                          const SizedBox(width: 5),
+                          Text(video.category,
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: .60),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.play_arrow_rounded,
-                      size: 38, color: Colors.white),
-                ),
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                  Container(
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: .75),
-                      borderRadius: BorderRadius.circular(6),
+                      color: Colors.white.withValues(alpha: .20),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
-                    child: Text(
-                      video.duration,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold),
+                    child: const Icon(Icons.play_arrow_rounded, size: 38, color: Colors.white),
+                  ),
+                  Positioned(
+                    right: 12,
+                    bottom: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: .50),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        video.duration,
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(14),
@@ -1732,29 +1640,19 @@ class _SolutionsPageState extends State<SolutionsPage> {
                   const SizedBox(height: 6),
                   Text(
                     video.description,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black87, height: 1.4),
+                    style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
                   ),
                   const SizedBox(height: 10),
                   Row(
-                    children: [
-                      const Icon(Icons.open_in_new,
-                          size: 14, color: Color(0xFF087F8C)),
-                      const SizedBox(width: 4),
-                      const Text(
+                    children: const [
+                      Icon(Icons.open_in_new, size: 14, color: Color(0xFF087F8C)),
+                      SizedBox(width: 4),
+                      Text(
                         'Watch on YouTube',
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF087F8C)),
-                      ),
-                      const Spacer(),
-                      Text(
-                        video.category,
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.black54,
-                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
