@@ -66,4 +66,5 @@ hs_err_pid*.log
 
 aquasense_log.txt
 aquasense_screen.png
+/android/build/
 

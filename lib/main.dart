@@ -30,7 +30,7 @@ class WaterProfile {
 
 // Live values are populated only from the backend response.
 WaterProfile liveProfile = const WaterProfile(
-  name: 'Live Water Readings',
+  name: 'Water Profile',
   ph: 0,
   tds: 0,
   turbidity: 0,
@@ -61,36 +61,100 @@ String _assessmentLabel(Map<String, dynamic>? result) {
   return 'UNABLE TO DETERMINE';
 }
 
-class AquaSenseAI extends StatelessWidget {
+class AquaSenseAI extends StatefulWidget {
   const AquaSenseAI({super.key});
+
+  @override
+  State<AquaSenseAI> createState() => _AquaSenseAIState();
+}
+
+class _AquaSenseAIState extends State<AquaSenseAI> {
+  bool _isDarkMode = false;
+
+  void _toggleTheme() {
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     const teal = Color(0xFF087F8C);
+    const navy = Color(0xFF102A43);
+    const lightBg = Color(0xFFF2F7FA);
+    const darkBg = Color(0xFF0A192F);
+    const darkCard = Color(0xFF172A45);
+
+    final lightTheme = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: teal,
+        brightness: Brightness.light,
+        primary: teal,
+        surface: Colors.white,
+      ),
+      scaffoldBackgroundColor: lightBg,
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 0.5,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: navy,
+        foregroundColor: Colors.white,
+      ),
+    );
+
+    final darkTheme = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: teal,
+        brightness: Brightness.dark,
+        primary: teal,
+        surface: darkCard,
+      ),
+      scaffoldBackgroundColor: darkBg,
+      cardTheme: CardThemeData(
+        color: darkCard,
+        elevation: 1.0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF0D1B2A),
+        foregroundColor: Colors.white,
+      ),
+    );
+
     return MaterialApp(
       title: 'AquaSense AI',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: teal),
-        scaffoldBackgroundColor: const Color(0xFFF2F7FA),
-        cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 0.5,
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        ),
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      home: SplashScreen(
+        isDarkMode: _isDarkMode,
+        onToggleTheme: _toggleTheme,
       ),
-      home: const SplashScreen(),
     );
   }
 }
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final bool isDarkMode;
+  final VoidCallback onToggleTheme;
+
+  const SplashScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onToggleTheme,
+  });
+
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
+
 class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
@@ -98,10 +162,16 @@ class _SplashScreenState extends State<SplashScreen> {
     Timer(const Duration(milliseconds: 1600), () {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+        MaterialPageRoute(
+          builder: (_) => MainNavigationScreen(
+            isDarkMode: widget.isDarkMode,
+            onToggleTheme: widget.onToggleTheme,
+          ),
+        ),
       );
     });
   }
+
   @override
   Widget build(BuildContext context) {
     const navy = Color(0xFF102A43);
@@ -111,7 +181,8 @@ class _SplashScreenState extends State<SplashScreen> {
         width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [navy, teal],
           ),
         ),
@@ -119,8 +190,10 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 112, height: 112,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                  color: Colors.white, borderRadius: BorderRadius.circular(32)),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Image.asset(
@@ -130,11 +203,20 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text('AquaSense AI', style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold)),
+            const Text('AquaSense AI',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('Smart Water Quality Monitoring', style: TextStyle(color: Colors.white70, fontSize: 14)),
+            const Text('Smart Water Quality Monitoring',
+                style: TextStyle(color: Colors.white70, fontSize: 14)),
             const SizedBox(height: 32),
-            const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white)),
+            const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                    strokeWidth: 3, color: Colors.white)),
             const SizedBox(height: 14),
             const Text('Starting…', style: TextStyle(color: Colors.white70)),
           ],
@@ -145,7 +227,14 @@ class _SplashScreenState extends State<SplashScreen> {
 }
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+  final bool isDarkMode;
+  final VoidCallback onToggleTheme;
+
+  const MainNavigationScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onToggleTheme,
+  });
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
@@ -164,10 +253,14 @@ class DemoProfile {
 }
 
 const List<DemoProfile> demoProfiles = [
-  DemoProfile(name: 'Clean Water', ph: 7.1, tds: 120.0),
-  DemoProfile(name: 'Tap/Borewell Water', ph: 7.4, tds: 420.0),
-  DemoProfile(name: 'Slightly Dirty Water', ph: 6.7, tds: 680.0),
-  DemoProfile(name: 'Dirty Water', ph: 5.8, tds: 1200.0),
+  // SAFE profiles
+  DemoProfile(name: 'Clean Water', ph: 7.2, tds: 110.0),
+  DemoProfile(name: 'Purified Water', ph: 7.5, tds: 160.0),
+
+  // UNSAFE profiles
+  DemoProfile(name: 'High TDS Water', ph: 7.4, tds: 650.0),
+  DemoProfile(name: 'Acidic Water', ph: 5.6, tds: 420.0),
+  DemoProfile(name: 'Heavy Mineral Water', ph: 5.2, tds: 1250.0),
 ];
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
@@ -179,11 +272,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _connectionRequestInFlight = false;
   bool aiLoading = false;
   bool hasAnalysis = false;
+  bool hasRefreshedAtLeastOnce = false;
   Map<String, dynamic>? aiResult;
   String? connectionMessage;
   final List<Map<String, dynamic>> capturedSamples = [];
 
-  // Alternating test profile index: A (Clean) -> B (Tap/Borewell) -> C (Slightly Dirty) -> D (Dirty) -> A
+  // Cycling through 5 test profiles (1..2 SAFE, 3..5 UNSAFE)
   int _testProfileIndex = 0;
 
   DemoProfile get activeDemoProfile => demoProfiles[_testProfileIndex];
@@ -193,20 +287,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   WaterProfile get profile => liveProfile;
 
-  double get shownPh => deviceConnected ? activeTestPh : 0;
-  double get shownTds => deviceConnected ? activeTestTds : 0;
-  double get shownTurbidity => deviceConnected ? profile.turbidity : 0;
-  double get shownFlow => deviceConnected ? flowRate : 0;
+  double get shownPh => hasRefreshedAtLeastOnce ? activeTestPh : 0;
+  double get shownTds => hasRefreshedAtLeastOnce ? activeTestTds : 0;
+  double get shownTurbidity => (deviceConnected && hasRefreshedAtLeastOnce) ? profile.turbidity : 0;
+  double get shownFlow => (deviceConnected && hasRefreshedAtLeastOnce) ? flowRate : 0;
+
+  String get turbidityDisplayString => (deviceConnected && hasRefreshedAtLeastOnce)
+      ? '${profile.turbidity.toStringAsFixed(1)} NTU'
+      : '--';
+
+  String get flowDisplayString => (deviceConnected && hasRefreshedAtLeastOnce)
+      ? '${flowRate.toStringAsFixed(2)} L/min'
+      : '--';
 
   @override
   void initState() {
     super.initState();
-    _refreshConnection();
-    // Recheck device freshness regularly so the UI does not remain connected
-    // after the ESP8266 stops sending readings.
-    _connectionTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (!refreshing) _refreshConnection(showSpinner: false);
+    _checkInitialConnection();
+    _connectionTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!refreshing && hasRefreshedAtLeastOnce) {
+        _refreshConnection(showSpinner: false);
+      }
     });
+  }
+
+  Future<void> _checkInitialConnection() async {
+    await _refreshConnection(showSpinner: false);
   }
 
   @override
@@ -253,7 +359,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             if (ph is! num ||
                 tds is! num ||
                 turbidity is! num ||
-                flow is! num) {
+                flow is! num ||
+                !ph.toDouble().isFinite ||
+                !tds.toDouble().isFinite ||
+                !turbidity.toDouble().isFinite ||
+                !flow.toDouble().isFinite ||
+                ph < 0 || ph > 14 ||
+                tds < 0 ||
+                turbidity < 0 ||
+                flow < 0) {
               connected = false;
               message = 'Device disconnected. Incomplete sensor data.';
             } else {
@@ -264,7 +378,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 tds: activeTestTds,
                 turbidity: turbidity.toDouble(),
                 recommendation:
-                    'Run an analysis to receive a recommendation based on live readings.',
+                    'Run an analysis to receive a recommendation based on current readings.',
               );
               message = 'Connected';
             }
@@ -290,35 +404,102 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     setState(() {
       deviceConnected = connected;
-      if (connected) liveProfile = nextProfile;
-      flowRate = connected ? latestFlow : 0;
+      if (connected) {
+        liveProfile = nextProfile;
+        flowRate = latestFlow;
+      } else {
+        // Clear cached hardware sensor readings when offline or stale
+        liveProfile = const WaterProfile(
+          name: 'Offline Profile',
+          ph: 0,
+          tds: 0,
+          turbidity: 0,
+          recommendation: '',
+        );
+        flowRate = 0;
+      }
       connectionMessage = message;
       refreshing = false;
-
-      if (!connected) {
-        hasAnalysis = false;
-        aiResult = null;
-      }
     });
   }
 
   Future<void> _refreshProfile() async {
     if (refreshing || _connectionRequestInFlight) return;
 
-    // Advance profile in sequence on manual refresh: A -> B -> C -> D -> A
-    _testProfileIndex = (_testProfileIndex + 1) % demoProfiles.length;
-
     setState(() {
+      refreshing = true;
+
+      // Clear the previous profile's AI assessment.
       hasAnalysis = false;
       aiResult = null;
-      aiLoading = false;
+
+      // Advance to the next water profile.
+      if (!hasRefreshedAtLeastOnce) {
+        hasRefreshedAtLeastOnce = true;
+        _testProfileIndex = 0;
+      } else {
+        _testProfileIndex =
+            (_testProfileIndex + 1) % demoProfiles.length;
+      }
     });
 
-    await _refreshConnection();
+    // Smooth loading delay.
+    await Future.delayed(const Duration(milliseconds: 1400));
+
+    await _refreshConnection(showSpinner: false);
+
+    if (deviceConnected) {
+      await _analyzeWaterSilent();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      refreshing = false;
+    });
+  }
+
+  Future<void> _analyzeWaterSilent() async {
+    if (!deviceConnected) return;
+
+    Map<String, dynamic>? result;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$backendUrl/api/analyze'),
+            headers: const {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'ph': activeTestPh,
+              'tds': activeTestTds,
+              'turbidity': profile.turbidity,
+              'flow_rate': flowRate,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+
+        if (decoded is Map<String, dynamic>) {
+          result = decoded;
+        }
+      }
+    } catch (e) {
+      result = null;
+    }
+
+    // Never generate a local SAFE/UNSAFE result.
+    // Use only the backend assessment.
+    aiResult = result;
+    hasAnalysis = true;
   }
 
   Future<void> _analyzeWater() async {
     if (!deviceConnected || aiLoading) return;
+
     setState(() {
       aiLoading = true;
       hasAnalysis = false;
@@ -326,27 +507,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
 
     Map<String, dynamic>? result;
+
     try {
       final response = await http
           .post(
-        Uri.parse('$backendUrl/api/analyze'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'ph': shownPh,
-          'tds': shownTds,
-          'turbidity': shownTurbidity,
-          'flow_rate': shownFlow,
-        }),
-      )
+            Uri.parse('$backendUrl/api/analyze'),
+            headers: const {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'ph': shownPh,
+              'tds': shownTds,
+              'turbidity': shownTurbidity,
+              'flow_rate': shownFlow,
+            }),
+          )
           .timeout(const Duration(seconds: 12));
+
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-        if (decoded is Map<String, dynamic>) result = decoded;
+
+        if (decoded is Map<String, dynamic> &&
+            (decoded['assessment'] == 'Safe' ||
+                decoded['assessment'] == 'Unsafe' ||
+                decoded['assessment'] == 'Unable to Determine')) {
+          result = decoded;
+        }
       }
     } catch (_) {
       result = null;
     }
+
     if (!mounted) return;
+
     setState(() {
       aiResult = result;
       aiLoading = false;
@@ -444,6 +637,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         connected: deviceConnected,
         connectionMessage: connectionMessage ?? 'Checking device connection…',
         refreshing: refreshing,
+        hasRefreshedAtLeastOnce: hasRefreshedAtLeastOnce,
         sampleCount: capturedSamples.length,
         onRefresh: _refreshProfile,
         onCapture: _captureSample,
@@ -470,8 +664,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         connected: deviceConnected,
         loading: aiLoading,
         hasAnalysis: hasAnalysis,
+        refreshing: refreshing,
+        hasRefreshedAtLeastOnce: hasRefreshedAtLeastOnce,
         aiResult: aiResult,
         onOpenAnalysis: () => setState(() => selectedIndex = 1),
+        onRefresh: _refreshProfile,
       ),
       SamplesPage(
         samples: capturedSamples,
@@ -483,6 +680,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         connectionMessage: connectionMessage ?? 'Checking device connection…',
         refreshing: refreshing,
         onRefresh: _refreshConnection,
+        isDarkMode: widget.isDarkMode,
+        onToggleTheme: widget.onToggleTheme,
       ),
     ];
 
@@ -527,7 +726,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 class DashboardPage extends StatelessWidget {
   final WaterProfile profile;
   final double ph, tds, turbidity, flowRate;
-  final bool connected, refreshing;
+  final bool connected, refreshing, hasRefreshedAtLeastOnce;
   final String connectionMessage;
   final int sampleCount;
   final VoidCallback onRefresh, onCapture, onOpenAnalysis;
@@ -542,6 +741,7 @@ class DashboardPage extends StatelessWidget {
     required this.connected,
     required this.connectionMessage,
     required this.refreshing,
+    required this.hasRefreshedAtLeastOnce,
     required this.sampleCount,
     required this.onRefresh,
     required this.onCapture,
@@ -578,6 +778,36 @@ class DashboardPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (refreshing) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  vertical: 14, horizontal: 18),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: teal.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: teal),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: teal),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Checking water quality…',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -586,10 +816,10 @@ class DashboardPage extends StatelessWidget {
             mainAxisSpacing: 12,
             childAspectRatio: 1.42,
             children: [
-              SensorTile(title: 'pH Level', value: connected ? ph.toStringAsFixed(1) : '--', unit: 'pH', icon: Icons.science, color: const Color(0xFF6C63FF)),
-              SensorTile(title: 'TDS', value: connected ? (tds < 10 ? tds.toStringAsFixed(2) : tds.toStringAsFixed(0)) : '--', unit: 'ppm', icon: Icons.water_drop, color: teal),
-              SensorTile(title: 'Turbidity (Hardware)', value: connected ? turbidity.toStringAsFixed(1) : '--', unit: 'NTU*', icon: Icons.blur_on, color: const Color(0xFF0088CC)),
-              SensorTile(title: 'Flow Rate (Hardware)', value: connected ? flowRate.toStringAsFixed(2) : '--', unit: 'L/min*', icon: Icons.speed, color: const Color(0xFFEF8A17)),
+              SensorTile(title: 'pH Level', value: !hasRefreshedAtLeastOnce ? '00' : connected ? ph.toStringAsFixed(1) : '00', unit: 'pH', icon: Icons.science, color: const Color(0xFF6C63FF)),
+              SensorTile(title: 'TDS', value: !hasRefreshedAtLeastOnce ? '00' : connected ? (tds < 10 ? tds.toStringAsFixed(2) : tds.toStringAsFixed(0)) : '00', unit: 'ppm', icon: Icons.water_drop, color: teal),
+              SensorTile(title: 'Turbidity', value: !hasRefreshedAtLeastOnce ? '00' : connected ? turbidity.toStringAsFixed(1) : '00', unit: 'NTU*', icon: Icons.blur_on, color: const Color(0xFF0088CC)),
+              SensorTile(title: 'Flow Rate', value: !hasRefreshedAtLeastOnce ? '00' : connected ? flowRate.toStringAsFixed(2) : '00', unit: 'L/min*', icon: Icons.speed, color: const Color(0xFFEF8A17)),
             ],
           ),
           const SizedBox(height: 16),
@@ -620,7 +850,7 @@ class DashboardPage extends StatelessWidget {
             icon: refreshing
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.refresh),
-            label: Text(refreshing ? 'Refreshing…' : 'Refresh Readings'),
+            label: Text(refreshing ? 'Checking…' : 'Refresh Readings'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -679,34 +909,66 @@ class SensorTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(15),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .04), blurRadius: 9)],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: color, size: 25),
-        const Spacer(),
-        Text(title, style: const TextStyle(color: Colors.black54, fontSize: 13)),
-        const SizedBox(height: 3),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Flexible(child: Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 5),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 3),
-              child: Text(unit, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+  Widget build(BuildContext context) {
+    final cardColor = Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black26 : Colors.black.withValues(alpha: .04),
+            blurRadius: 9,
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 25),
+          const Spacer(),
+          Text(
+            title,
+            style: TextStyle(
+              color: isDark ? Colors.white70 : Colors.black54,
+              fontSize: 13,
             ),
-          ],
-        ),
-      ],
-    ),
-  );
+          ),
+          const SizedBox(height: 3),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF102A43),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  unit,
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : Colors.black54,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class AnalysisPage extends StatelessWidget {
@@ -735,6 +997,8 @@ class AnalysisPage extends StatelessWidget {
     final safe = _isResultSafe(aiResult);
     const navy = Color(0xFF102A43);
     const teal = Color(0xFF087F8C);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Water Analysis'),
@@ -777,10 +1041,10 @@ class AnalysisPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _analysisMetric('pH level', ph.toStringAsFixed(1), 'Demo value', Icons.science_outlined, const Color(0xFF6C63FF), (ph / 14).clamp(0.0, 1.0)),
-          _analysisMetric('Total dissolved solids', '${tds < 10 ? tds.toStringAsFixed(2) : tds.toStringAsFixed(0)} ppm', 'Demo value', Icons.water_drop_outlined, teal, (tds / 1500).clamp(0.0, 1.0)),
-          _analysisMetric('Turbidity', '${turbidity.toStringAsFixed(1)} NTU*', 'Hardware reading', Icons.blur_on, const Color(0xFF2F80ED), (turbidity / 20).clamp(0.0, 1.0)),
-          _analysisMetric('Flow rate', '${flowRate.toStringAsFixed(2)} L/min*', 'Hardware reading', Icons.speed, const Color(0xFFDD8A19), (flowRate / 10).clamp(0.0, 1.0)),
+          _analysisMetric(context, 'pH level', ph.toStringAsFixed(1), 'Measured pH', Icons.science_outlined, const Color(0xFF6C63FF), (ph / 14).clamp(0.0, 1.0)),
+          _analysisMetric(context, 'Total dissolved solids', '${tds < 10 ? tds.toStringAsFixed(2) : tds.toStringAsFixed(0)} ppm', 'Dissolved solids', Icons.water_drop_outlined, teal, (tds / 1500).clamp(0.0, 1.0)),
+          _analysisMetric(context, 'Turbidity', connected ? '${turbidity.toStringAsFixed(1)} NTU' : '--', 'Water clarity', Icons.blur_on, const Color(0xFF2F80ED), (turbidity / 20).clamp(0.0, 1.0)),
+          _analysisMetric(context, 'Flow rate', connected ? '${flowRate.toStringAsFixed(2)} L/min' : '--', 'Flow velocity', Icons.speed, const Color(0xFFDD8A19), (flowRate / 10).clamp(0.0, 1.0)),
           const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: connected && !loading ? onAnalyze : null,
@@ -794,9 +1058,9 @@ class AnalysisPage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: safe == true ? const Color(0xFF9DDDBD) : safe == false ? const Color(0xFFF0AAAA) : const Color(0xFFDCE8EE)),
+                border: Border.all(color: safe == true ? const Color(0xFF9DDDBD) : safe == false ? const Color(0xFFF0AAAA) : (isDark ? const Color(0xFF233554) : const Color(0xFFDCE8EE))),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -806,21 +1070,16 @@ class AnalysisPage extends StatelessWidget {
                         color: safe == true ? Colors.green.shade700 : safe == false ? Colors.red.shade700 : Colors.blueGrey),
                     const SizedBox(width: 8),
                     Text(_assessmentLabel(aiResult),
-                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: safe == true ? Colors.green.shade800 : safe == false ? Colors.red.shade800 : Colors.blueGrey.shade800)),
+                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: safe == true ? Colors.green.shade800 : safe == false ? Colors.red.shade800 : (isDark ? Colors.lightBlue.shade200 : Colors.blueGrey.shade800))),
                   ]),
                   const SizedBox(height: 12),
                   const Text('Purification recommendation', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
-                  Text(_recommendationText(aiResult, 'The analysis service did not provide a recommendation. Verify the sensor readings and backend analysis endpoint.'), style: const TextStyle(height: 1.5)),
+                  Text(_recommendationText(aiResult, 'The analysis service did not provide a recommendation. Verify sensor readings and backend endpoint.'), style: const TextStyle(height: 1.5)),
                   if (aiResult == null) const Padding(
                     padding: EdgeInsets.only(top: 8),
-                    child: Text('Backend analysis was unavailable. No safety classification can be confirmed.',
+                    child: Text('Backend analysis was unavailable.',
                         style: TextStyle(color: Colors.black54, fontSize: 12)),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'A result is only shown when the backend returns a recognizable classification. Sensor calibration and validated testing are required to confirm drinking-water safety.',
-                    style: TextStyle(color: Colors.black54, fontSize: 12, height: 1.4),
                   ),
                 ],
               ),
@@ -846,303 +1105,147 @@ String _recommendationText(Map<String, dynamic>? result, String fallback) {
 }
 
 Widget _analysisMetric(
+    BuildContext context,
     String title,
     String value,
     String note,
     IconData icon,
     Color color,
     double progress,
-    ) =>
-    Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: const Color(0xFFDCE8EE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: .10),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(title, style: const TextStyle(color: Color(0xFF526777))),
-                const SizedBox(height: 3),
-                Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF102A43))),
-              ]),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              color: color,
-              backgroundColor: const Color(0xFFE8EFF3),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(note, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-        ],
-      ),
-    );
+    ) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final cardColor = Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface;
 
-class VideoItem {
+  return Container(
+    margin: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(
+      color: cardColor,
+      borderRadius: BorderRadius.circular(17),
+      border: Border.all(
+        color: isDark ? const Color(0xFF233554) : const Color(0xFFDCE8EE),
+      ),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF526777))),
+              const SizedBox(height: 3),
+              Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF102A43))),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            color: color,
+            backgroundColor: isDark ? const Color(0xFF233554) : const Color(0xFFE8EFF3),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(note, style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)),
+      ],
+    ),
+  );
+}
+
+
+class SolutionVideo {
   final String title;
   final String description;
-  final String url;
+  final String videoUrl;
   final String thumbnailUrl;
-  final String duration;
-  final String category;
+  final String problemCategory;
 
-  const VideoItem({
+  const SolutionVideo({
     required this.title,
     required this.description,
-    required this.url,
+    required this.videoUrl,
     required this.thumbnailUrl,
-    required this.duration,
-    required this.category,
+    required this.problemCategory,
   });
 }
 
-const List<VideoItem> educationalVideos = [
-  VideoItem(
-    title: 'Understanding pH, TDS, and Turbidity in Water',
-    description:
-        'A clear educational breakdown of water-quality parameters, digital TDS meters, pH testing range, and turbidity measuring principles.',
-    url: 'https://www.youtube.com/watch?v=3K0B3TCo-2M',
-    thumbnailUrl: 'https://img.youtube.com/vi/3K0B3TCo-2M/hqdefault.jpg',
-    duration: '8:45',
-    category: 'General Safety',
-  ),
-  VideoItem(
-    title: 'How Reverse Osmosis (RO) Water Purification Works',
-    description:
-        '3D animation showing how semi-permeable RO membranes remove dissolved salts, heavy metals, and high TDS from drinking water.',
-    url: 'https://www.youtube.com/watch?v=aVdWqbpqv_U',
-    thumbnailUrl: 'https://img.youtube.com/vi/aVdWqbpqv_U/hqdefault.jpg',
-    duration: '5:20',
-    category: 'High TDS',
-  ),
-  VideoItem(
-    title: 'UV Water Purification & Disinfection System Guide',
-    description:
-        'Learn how 254nm Ultraviolet (UV-C) lamps neutralize 99.99% of bacteria, viruses, and pathogens without chemical additives.',
-    url: 'https://www.youtube.com/watch?v=0k3P8L3XN6k',
-    thumbnailUrl: 'https://img.youtube.com/vi/0k3P8L3XN6k/hqdefault.jpg',
-    duration: '6:15',
-    category: 'Microbial / UV',
-  ),
-  VideoItem(
-    title: 'Water Filter Maintenance & Cartridge Replacement Guide',
-    description:
-        'Step-by-step instructions for replacing sediment filters, carbon blocks, quartz sleeves, and servicing home purifiers.',
-    url: 'https://www.youtube.com/watch?v=gT-xO3PzT64',
-    thumbnailUrl: 'https://img.youtube.com/vi/gT-xO3PzT64/hqdefault.jpg',
-    duration: '7:30',
-    category: 'Turbidity',
-  ),
-  VideoItem(
-    title: 'Safe Drinking Water Practices & Household Storage Hygiene',
-    description:
-        'World health guidance on multi-barrier water treatment, storage container hygiene, and preventing secondary contamination.',
-    url: 'https://www.youtube.com/watch?v=o0L8d2sM5Z8',
-    thumbnailUrl: 'https://img.youtube.com/vi/o0L8d2sM5Z8/hqdefault.jpg',
-    duration: '9:10',
-    category: 'General Safety',
-  ),
-];
+List<SolutionVideo> _getRelevantVideos(
+    double ph, double tds, double turbidity, bool isTurbidityValid) {
+  final List<SolutionVideo> videos = [];
 
-class SolutionTopic {
-  final String title;
-  final String category;
-  final IconData icon;
-  final Color color;
-  final String simpleMeaning;
-  final String possibleCauses;
-  final String healthConcerns;
-  final String recommendedMethod;
-  final List<String> stepByStepProcess;
-  final String filterOptions;
-  final String maintenanceInstructions;
-  final String whenToContactLab;
+  // 1. Turbidity Unsafe (above safe threshold of 5.0 NTU)
+  if (isTurbidityValid && turbidity > 5.0) {
+    videos.add(
+      const SolutionVideo(
+        title: 'Turbidity Water Treatment Solution',
+        description:
+            'How sediment pre-filtration and clarification remove suspended particles and reduce turbidity.',
+        videoUrl: 'https://youtu.be/Bp07m5BEGok',
+        thumbnailUrl: 'https://img.youtube.com/vi/Bp07m5BEGok/hqdefault.jpg',
+        problemCategory: 'Turbidity Unsafe Solution',
+      ),
+    );
+  }
 
-  const SolutionTopic({
-    required this.title,
-    required this.category,
-    required this.icon,
-    required this.color,
-    required this.simpleMeaning,
-    required this.possibleCauses,
-    required this.healthConcerns,
-    required this.recommendedMethod,
-    required this.stepByStepProcess,
-    required this.filterOptions,
-    required this.maintenanceInstructions,
-    required this.whenToContactLab,
-  });
+  // 2. TDS Unsafe (above 500 mg/L)
+  if (tds > 500) {
+    videos.add(
+      const SolutionVideo(
+        title: 'High TDS Water Treatment Solution',
+        description:
+            'How Reverse Osmosis (RO) filtration systems reduce total dissolved solids in drinking water.',
+        videoUrl: 'https://youtu.be/B7qB62Msems',
+        thumbnailUrl: 'https://img.youtube.com/vi/B7qB62Msems/hqdefault.jpg',
+        problemCategory: 'TDS Unsafe Solution',
+      ),
+    );
+  }
+
+  // 3. pH Unsafe (outside 6.5 to 8.5 range)
+  if (ph < 6.5 || ph > 8.5) {
+    videos.add(
+      SolutionVideo(
+        title: 'pH Adjustment & Neutralization Solution',
+        description: ph < 6.5
+            ? 'How calcite neutralizing filtration corrects acidic water pH to safe neutral levels.'
+            : 'How pH neutralization systems treat highly alkaline water.',
+        videoUrl: 'https://youtu.be/AyZjmOmI1Uo',
+        thumbnailUrl: 'https://img.youtube.com/vi/AyZjmOmI1Uo/hqdefault.jpg',
+        problemCategory: 'pH Unsafe Solution',
+      ),
+    );
+  }
+
+  return videos;
 }
 
-const List<SolutionTopic> solutionTopics = [
-  SolutionTopic(
-    title: 'High Total Dissolved Solids (TDS)',
-    category: 'High TDS',
-    icon: Icons.water_drop_outlined,
-    color: Color(0xFF087F8C),
-    simpleMeaning:
-        'TDS measures minerals, salts, and metals dissolved in water. Readings above 300–500 ppm indicate high mineral concentration.',
-    possibleCauses:
-        'Groundwater passing through mineral deposits (calcium, magnesium, chloride), agricultural runoff, urban stormwater, or hard water wells.',
-    healthConcerns:
-        'Salty or bitter taste, pipe scaling, appliance damage. Very high TDS (>1,000 ppm) may indicate heavy metals or elevated sodium levels causing kidney stress.',
-    recommendedMethod:
-        'Reverse Osmosis (RO) Filtration or Solar/Thermal Distillation.',
-    stepByStepProcess: [
-      'Pass water through a 5-micron sediment pre-filter to trap sand and silt.',
-      'Route through an activated carbon filter to remove chlorine and volatile organic chemicals.',
-      'Pass water under pressure through a semi-permeable RO membrane (0.0001 micron) to filter 95–99% of dissolved salts.',
-      'Pass through a post-carbon polishing filter for fresh taste.',
-      'Store in a food-grade sealed tank.',
-    ],
-    filterOptions:
-        'Multi-stage Home RO Purifiers, Countertop Distillers, Deionization (DI) Resin Exchange Units.',
-    maintenanceInstructions:
-        'Replace sediment and carbon pre-filters every 6 months. Replace the RO membrane every 24–36 months depending on input TDS.',
-    whenToContactLab:
-        'Contact an accredited lab if TDS exceeds 1,000 ppm, if water leaves white/crusty residues, or if an unusual chemical smell is present.',
-  ),
-  SolutionTopic(
-    title: 'pH Imbalance (Acidic or Alkaline Water)',
-    category: 'pH Balance',
-    icon: Icons.science_outlined,
-    color: Color(0xFF6C63FF),
-    simpleMeaning:
-        'pH measures acidity or alkalinity on a scale of 0 to 14. Safe drinking water falls strictly between 6.5 and 8.5.',
-    possibleCauses:
-        'Acidic water (pH < 6.5) is caused by acid rain, organic matter, or dissolved carbon dioxide. Alkaline water (pH > 8.5) stems from carbonate minerals or alkaline runoff.',
-    healthConcerns:
-        'Acidic water corrodes copper/lead plumbing, leaching toxic metals into drinking water. Highly alkaline water feels slippery, tastes bitter, and causes pipe scaling.',
-    recommendedMethod:
-        'Calcite Neutralizing Media Filter (for low pH) or Chemical Neutralizer / Proportional Dosing (for high pH).',
-    stepByStepProcess: [
-      'Install an in-line Calcite / Magnesium Oxide neutralizing tank on the main water supply.',
-      'As acidic water flows through calcite media, calcium carbonate dissolves naturally, raising pH toward 7.2.',
-      'For alkaline water, install a citric acid or soda ash proportional injection pump.',
-      'Install a post-filter to trap any dislodged mineral dust.',
-    ],
-    filterOptions:
-        'Whole-House Calcite Tank Filters, Alkaline Remineralization Cartridges, Citric Acid Injection Systems.',
-    maintenanceInstructions:
-        'Top up calcite or neutralizing media once or twice a year depending on flow volume and water acidity.',
-    whenToContactLab:
-        'Contact a certified testing lab if green/blue stains appear on sinks/faucets (indicating copper pipe corrosion) or if plumbing contains lead solder.',
-  ),
-  SolutionTopic(
-    title: 'High Turbidity (Cloudy or Hazy Water)',
-    category: 'Turbidity',
-    icon: Icons.blur_on,
-    color: Color(0xFF2F80ED),
-    simpleMeaning:
-        'Turbidity measures water clarity. High turbidity (>1.0 NTU) means suspended silt, clay, rust, or organic particles make water cloudy.',
-    possibleCauses:
-        'Soil erosion, heavy rainfall runoff, well agitation, rusting iron pipes, or algae growth in open water sources.',
-    healthConcerns:
-        'Suspended particles shield pathogens (bacteria/viruses) from UV light and chlorine disinfection, significantly increasing biological infection risk.',
-    recommendedMethod:
-        'Multi-Stage Sediment Filtration followed by Sub-Micron Pleated/Spun Filtration.',
-    stepByStepProcess: [
-      'Pass water through a 20-micron coarse spun polypropylene filter to catch large sand and rust flakes.',
-      'Pass through a 5-micron fine melt-blown sediment filter for silt and clay particles.',
-      'Pass through a 1-micron or 0.5-micron ceramic/pleated cartridge for micro-turbidity.',
-      'Proceed to secondary disinfection (UV or chlorination) now that water is crystal clear.',
-    ],
-    filterOptions:
-        'Melt-Blown Polypropylene Cartridges, Washable Pleated Filters, Multi-Media Sand Bed Filters.',
-    maintenanceInstructions:
-        'Rinse or replace sediment cartridges every 1 to 3 months when water pressure drops across the filter housing.',
-    whenToContactLab:
-        'Contact a lab if water turns brown/muddy unexpectedly, or if cloudiness persists after sub-micron filtration.',
-  ),
-  SolutionTopic(
-    title: 'Microbial & Biological Contamination',
-    category: 'Microbial / UV',
-    icon: Icons.bug_report_outlined,
-    color: Color(0xFFE65100),
-    simpleMeaning:
-        'Microbial contamination refers to disease-causing organisms such as E. coli, Coliform bacteria, Giardia, or viruses.',
-    possibleCauses:
-        'Sewage leak, livestock runoff entering wells, flooded septic tanks, or unsealed overhead water tanks.',
-    healthConcerns:
-        'Acute gastrointestinal infections, severe diarrhea, vomiting, cholera, dysentery, typhoid, and hepatitis.',
-    recommendedMethod:
-        'Ultraviolet (UV-C) Disinfection, Rolling Boil (3+ mins), or Chlorination.',
-    stepByStepProcess: [
-      'Ensure water is pre-filtered below 1 NTU turbidity so microbes cannot hide in shadows.',
-      'Pass water through a stainless steel UV chamber equipped with a 254nm germicidal UV lamp.',
-      'UV-C radiation disrupts pathogen DNA, preventing replication and neutralizing 99.99% of bacteria and viruses.',
-      'For emergency situations without power, bring water to a rolling boil for at least 3 full minutes.',
-    ],
-    filterOptions:
-        '254nm Ultraviolet (UV-C) Sterilizers, Hollow-Fiber Ultrafiltration (UF) Membranes, Chlorine Tablets / Liquid Chlorination.',
-    maintenanceInstructions:
-        'Clean the quartz sleeve inside the UV chamber every 6 months. Replace the UV lamp annually (approx. 9,000 hours runtime).',
-    whenToContactLab:
-        'Immediately submit a sample to an accredited micro-biology lab if anyone in the household suffers waterborne illness or after flooding events.',
-  ),
-  SolutionTopic(
-    title: 'General Drinking-Water Safety & System Care',
-    category: 'General Safety',
-    icon: Icons.shield_outlined,
-    color: Color(0xFF102A43),
-    simpleMeaning:
-        'Overall household water hygiene, storage protection, and multi-barrier purification best practices.',
-    possibleCauses:
-        'Unwashed storage tanks, stagnant water in purifiers, biofilm buildup inside old tubing, open water containers.',
-    healthConcerns:
-        'Secondary bacterial growth in purified water storage tanks and unmaintained filter cartridges.',
-    recommendedMethod:
-        'Multi-Barrier Home Water Purifier & Hygienic Sealed Storage.',
-    stepByStepProcess: [
-      'Combine sediment pre-filtration + RO membrane + post-carbon + UV lamp for complete multi-barrier protection.',
-      'Drain and sanitize household overhead tanks every 6 months using food-grade hydrogen peroxide or dilute chlorine solution.',
-      'Keep purified drinking water in covered food-grade stainless steel or glass containers.',
-      'Never allow dirty hands or unwashed cups to dip into clean drinking water storage.',
-    ],
-    filterOptions:
-        'Complete 5-Stage Home RO + UV + UF Systems, Food-Grade Stainless Steel Storage Vessels.',
-    maintenanceInstructions:
-        'Sanitize purifier lines and storage tank yearly. Flush new filter cartridges for 10 minutes before first consumption.',
-    whenToContactLab:
-        'Perform a comprehensive accredited laboratory water test at least once a year for private well or municipal tap water sources.',
-  ),
-];
-
-Future<void> _launchVideo(BuildContext context, String url) async {
+Future<void> _launchUrl(BuildContext context, String url) async {
   final Uri uri = Uri.parse(url);
   try {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open video URL: $url')),
+          SnackBar(content: Text('Could not open video link: $url')),
         );
       }
     }
   } catch (_) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to launch video URL.')),
+        const SnackBar(content: Text('Unable to launch video link.')),
       );
     }
   }
@@ -1151,9 +1254,14 @@ Future<void> _launchVideo(BuildContext context, String url) async {
 class SolutionsPage extends StatelessWidget {
   final WaterProfile profile;
   final double ph, tds, turbidity, flowRate;
-  final bool connected, loading, hasAnalysis;
+  final bool connected,
+      loading,
+      hasAnalysis,
+      refreshing,
+      hasRefreshedAtLeastOnce;
   final Map<String, dynamic>? aiResult;
   final VoidCallback onOpenAnalysis;
+  final VoidCallback onRefresh;
 
   const SolutionsPage({
     super.key,
@@ -1165,8 +1273,11 @@ class SolutionsPage extends StatelessWidget {
     required this.connected,
     required this.loading,
     required this.hasAnalysis,
+    required this.refreshing,
+    required this.hasRefreshedAtLeastOnce,
     required this.aiResult,
     required this.onOpenAnalysis,
+    required this.onRefresh,
   });
 
   @override
@@ -1174,456 +1285,417 @@ class SolutionsPage extends StatelessWidget {
     const navy = Color(0xFF102A43);
     const teal = Color(0xFF087F8C);
 
+    final isTurbidityValid = connected &&
+        hasAnalysis &&
+        aiResult != null &&
+        aiResult!['turbidity'] != null &&
+        turbidity <= 50.0 &&
+        turbidity >= 0.0;
+
+    final relevantVideos =
+        _getRelevantVideos(ph, tds, turbidity, isTurbidityValid);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Purification Solutions & Guide'),
+        title: const Text('Water Safety & Solutions'),
         backgroundColor: navy,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Refresh water check',
+            onPressed: refreshing ? null : onRefresh,
+            icon: refreshing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.refresh),
+          ),
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Header Banner
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [navy, teal]),
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(Icons.lightbulb_rounded, color: Color(0xFF7DE3E0)),
-                  SizedBox(width: 8),
-                  Text('WATER PURIFICATION SOLUTIONS',
-                      style: TextStyle(
-                          color: Colors.white70,
+      body: !connected ||
+              !hasAnalysis ||
+              aiResult == null ||
+              !hasRefreshedAtLeastOnce
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                        !connected
+                            ? Icons.wifi_off
+                            : Icons.analytics_outlined,
+                        size: 54,
+                        color: teal),
+                    const SizedBox(height: 14),
+                    Text(
+                      !connected
+                          ? 'Device Disconnected'
+                          : 'Connect the device and run water analysis',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          letterSpacing: 1)),
-                ]),
-                SizedBox(height: 12),
-                Text('Treatment & Parameter Guide',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 23,
-                        fontWeight: FontWeight.bold)),
-                SizedBox(height: 6),
-                Text(
-                  'Comprehensive guidance for water-quality issues, treatment processes, and educational videos.',
-                  style: TextStyle(color: Colors.white70, height: 1.4),
+                          color: navy),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: onOpenAnalysis,
+                      icon: const Icon(Icons.analytics_outlined),
+                      label: const Text('Open AI Analysis'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Personalized AI Recommendation Card
-          _buildPersonalizedAiCard(context),
-          const SizedBox(height: 20),
-
-          // Parameter Guides Header
-          const Text('Detailed Water Quality Guides',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: navy)),
-          const SizedBox(height: 10),
-
-          ...solutionTopics.map((topic) => _buildTopicCard(topic)),
-
-          const SizedBox(height: 24),
-
-          // "Learn with Videos" Section
-          Row(
-            children: const [
-              Icon(Icons.video_library_outlined, color: teal, size: 24),
-              SizedBox(width: 8),
-              Text('Learn with Videos',
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: navy)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Educational video tutorials on water purification technologies and safe practices.',
-            style: TextStyle(color: Colors.black54, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-
-          ...educationalVideos.map((video) => _buildVideoCard(context, video)),
-
-          const SizedBox(height: 24),
-
-          // Laboratory Disclaimer Card
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF8E1),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFFFE082)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                const Icon(Icons.verified_outlined,
-                    color: Color(0xFFE65100), size: 26),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Accredited Laboratory Testing Disclaimer',
-                        style: TextStyle(
+                if (refreshing) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14, horizontal: 18),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: teal.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: teal),
+                    ),
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5, color: teal),
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Checking water quality…',
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
-                            color: Color(0xFFE65100)),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'AquaSense AI guides and parameter recommendations are provided for educational and monitoring guidance. Physical sensor values and AI predictions should not replace certified laboratory water testing. Always consult an accredited environmental testing laboratory when drinking-water safety is uncertain.',
-                        style: TextStyle(
-                            fontSize: 12, color: Color(0xFF5D4037), height: 1.45),
-                      ),
-                    ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // 1. Water Parameters
+                const Text('Water Parameters',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: navy)),
+                const SizedBox(height: 10),
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 1.5,
+                  children: [
+                    _parameterCard(context, 'pH Level', ph.toStringAsFixed(1),
+                        'pH', const Color(0xFF6C63FF), Icons.science),
+                    _parameterCard(
+                        context,
+                        'TDS',
+                        tds < 10
+                            ? tds.toStringAsFixed(2)
+                            : tds.toStringAsFixed(0),
+                        'ppm',
+                        teal,
+                        Icons.water_drop),
+                    _parameterCard(
+                        context,
+                        'Turbidity',
+                        isTurbidityValid
+                            ? turbidity.toStringAsFixed(1)
+                            : '--',
+                        'NTU',
+                        const Color(0xFF0088CC),
+                        Icons.blur_on),
+                    _parameterCard(
+                        context,
+                        'Flow Rate',
+                        flowRate.toStringAsFixed(2),
+                        'L/min',
+                        const Color(0xFFEF8A17),
+                        Icons.speed),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 2. Individual Parameter Analysis
+                const Text('Individual Parameter Analysis',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: navy)),
+                const SizedBox(height: 10),
+
+                // pH Analysis Card
+                _buildAnalysisCard(
+                  context,
+                  title: 'pH Level (${ph.toStringAsFixed(1)})',
+                  icon: Icons.science_outlined,
+                  iconColor: const Color(0xFF6C63FF),
+                  finding: ph < 6.5
+                      ? 'Low pH detected (${ph.toStringAsFixed(1)}): Water is acidic (below safe 6.5–8.5 range).'
+                      : ph > 8.5
+                          ? 'High pH detected (${ph.toStringAsFixed(1)}): Water is alkaline (above safe 6.5–8.5 range).'
+                          : 'pH level (${ph.toStringAsFixed(1)}) is in optimal balance (6.5–8.5 range).',
+                  concern: ph < 6.5
+                      ? 'Acidic water can cause metal pipe corrosion and leaching.'
+                      : ph > 8.5
+                          ? 'Highly alkaline water may taste bitter and cause scale buildup.'
+                          : 'pH balance is optimal.',
+                  treatment: ph < 6.5
+                      ? 'Calcite neutralizer media filtration system recommended.'
+                      : ph > 8.5
+                          ? 'Select an appropriate pH correction system based on testing.'
+                          : 'No pH adjustment required.',
+                ),
+                const SizedBox(height: 10),
+
+                // TDS Analysis Card
+                _buildAnalysisCard(
+                  context,
+                  title:
+                      'Total Dissolved Solids (${tds.toStringAsFixed(0)} mg/L)',
+                  icon: Icons.water_drop_outlined,
+                  iconColor: teal,
+                  finding: tds > 500
+                      ? 'Elevated TDS detected (${tds.toStringAsFixed(0)} mg/L): Exceeds 500 mg/L threshold.'
+                      : 'TDS (${tds.toStringAsFixed(0)} mg/L) is within the safe 500 mg/L threshold.',
+                  concern: tds > 500
+                      ? 'High concentration of dissolved mineral salts and inorganic ions.'
+                      : 'Total Dissolved Solids level is normal.',
+                  treatment: tds > 500
+                      ? 'Reverse Osmosis (RO) purification system recommended.'
+                      : 'No TDS treatment required.',
+                ),
+                const SizedBox(height: 10),
+
+                // Turbidity Analysis Card
+                _buildAnalysisCard(
+                  context,
+                  title: isTurbidityValid
+                      ? 'Turbidity (${turbidity.toStringAsFixed(1)} NTU)'
+                      : 'Turbidity (Unavailable)',
+                  icon: Icons.blur_on,
+                  iconColor: const Color(0xFF0088CC),
+                  finding: !isTurbidityValid
+                      ? 'Turbidity sensor reading is unavailable or uncalibrated.'
+                      : turbidity > 5.0
+                          ? 'Elevated Turbidity detected (${turbidity.toStringAsFixed(1)} NTU): Exceeds 5.0 NTU threshold.'
+                          : 'Turbidity (${turbidity.toStringAsFixed(1)} NTU) is within the safe 5.0 NTU threshold.',
+                  concern: !isTurbidityValid
+                      ? 'Probe is uncalibrated or disconnected.'
+                      : turbidity > 5.0
+                          ? 'High count of suspended silt, clay, or organic particles.'
+                          : 'Water clarity is optimal.',
+                  treatment: !isTurbidityValid
+                      ? 'Submerge and calibrate the optical turbidity probe in water before evaluating.'
+                      : turbidity > 5.0
+                          ? 'Multi-stage sediment pre-filtration (spun/melt-blown cartridges).'
+                          : 'No sediment pre-filtration required.',
+                ),
+                const SizedBox(height: 16),
+
+                // 3. Recommended Treatment
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.auto_awesome, color: teal),
+                            SizedBox(width: 8),
+                            Text('Recommended Treatment',
+                                style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                    color: navy)),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _recommendationText(
+                              aiResult,
+                              'All measured water parameters (pH, TDS, and Turbidity) are within configured safe operational limits. Maintain routine filter inspection and clean storage practices.'),
+                          style: const TextStyle(fontSize: 14, height: 1.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 4. Treatment Solution Videos (Shown ONLY when relevant issue videos exist)
+                if (relevantVideos.isNotEmpty) ...[
+                  const Text('Treatment Solution Videos',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: navy)),
+                  const SizedBox(height: 10),
+                  ...relevantVideos
+                      .map((video) => _buildVideoCard(context, video)),
+                  const SizedBox(height: 12),
+                ],
+
+                // 5. Working Refresh Check button
+                FilledButton.icon(
+                  onPressed: refreshing ? null : onRefresh,
+                  icon: refreshing
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: Text(refreshing ? 'Checking…' : 'Refresh Check'),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildAnalysisCard(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required String finding,
+    required String concern,
+    required String treatment,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const navy = Color(0xFF102A43);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: iconColor, size: 22),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : navy,
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPersonalizedAiCard(BuildContext context) {
-    if (!connected) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Row(children: [
-                Icon(Icons.wifi_off, color: Colors.orange),
-                SizedBox(width: 10),
-                Text('Educational Guidance Mode',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF102A43))),
-              ]),
-              SizedBox(height: 8),
-              Text(
-                'Device is currently disconnected. Browse the comprehensive parameter guides and video tutorials below for general water purification knowledge.',
-                style: TextStyle(color: Colors.black54, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final List<String> requiredTreatments = [];
-    final List<String> reasoningList = [];
-
-    if (tds > 300) {
-      requiredTreatments.add('Reverse Osmosis (RO)');
-      reasoningList.add(
-          'Elevated TDS (${tds.toStringAsFixed(0)} ppm): RO membrane filtration is required to filter dissolved mineral salts and heavy metals.');
-    }
-    if (ph < 6.5) {
-      requiredTreatments.add('Calcite Neutralizer');
-      reasoningList.add(
-          'Acidic water (pH ${ph.toStringAsFixed(1)}): Calcite neutralizer filter is recommended to raise pH and prevent pipe corrosion.');
-    } else if (ph > 8.5) {
-      requiredTreatments.add('pH Adjustment / Acid Dosing');
-      reasoningList.add(
-          'High pH (${ph.toStringAsFixed(1)}): Neutralizing treatment is recommended to prevent bitter taste and mineral scaling.');
-    }
-    if (turbidity > 1.0) {
-      requiredTreatments.add('Multi-Stage Sediment Pre-Filter');
-      reasoningList.add(
-          'High Turbidity (${turbidity.toStringAsFixed(1)} NTU): Sediment pre-filtration (5μm -> 1μm) is needed to catch suspended silt and prevent membrane clogging.');
-    }
-
-    final safe = _isResultSafe(aiResult);
-    if (safe == false ||
-        (hasAnalysis && _assessmentLabel(aiResult) == 'UNSAFE')) {
-      requiredTreatments.add('UV Disinfection / Boiling');
-      reasoningList.add(
-          'AI Assessment Unsafe: UV-C disinfection or boiling (3+ minutes) is required to neutralize microbial pathogens.');
-    }
-
-    if (requiredTreatments.isEmpty) {
-      requiredTreatments.add('Multi-Barrier Maintenance Filter');
-      reasoningList.add(
-          'Active readings (pH ${ph.toStringAsFixed(1)}, TDS ${tds.toStringAsFixed(0)} ppm, Turbidity ${turbidity.toStringAsFixed(1)} NTU) are within normal baseline ranges. Maintain standard sediment and carbon post-filters.');
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: safe == true
-              ? const Color(0xFF9DDDBD)
-              : safe == false
-                  ? const Color(0xFFF0AAAA)
-                  : const Color(0xFF087F8C),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: const [
-              Icon(Icons.auto_awesome, color: Color(0xFF087F8C)),
-              SizedBox(width: 8),
-              Text(
-                'Personalized AI Treatment Guidance',
-                style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF102A43)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: requiredTreatments
-                .map((t) => Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE4F6F5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(t,
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF087F8C))),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: 12),
-          const Text('Why these treatments are recommended:',
+            const SizedBox(height: 10),
+            Text(
+              finding,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Concern: $concern',
               style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Color(0xFF102A43))),
-          const SizedBox(height: 6),
-          ...reasoningList.map((reason) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('• ',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF087F8C))),
-                    Expanded(
-                        child: Text(reason,
-                            style:
-                                const TextStyle(fontSize: 13, height: 1.4))),
-                  ],
-                ),
-              )),
-          if (hasAnalysis && _recommendationText(aiResult, '').isNotEmpty) ...[
-            const Divider(height: 20),
-            const Text('Backend Model Notes:',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 4),
-            Text(_recommendationText(aiResult, ''),
-                style: const TextStyle(
-                    fontSize: 12, color: Colors.black87, height: 1.4)),
+                fontSize: 12,
+                color: isDark ? Colors.white70 : Colors.black87,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Action: $treatment',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isDark ? const Color(0xFF64FFDA) : const Color(0xFF087F8C),
+                height: 1.4,
+              ),
+            ),
           ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: onOpenAnalysis,
-            icon: const Icon(Icons.analytics_outlined),
-            label: const Text('View Detailed AI Analysis'),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildTopicCard(SolutionTopic topic) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: topic.color.withValues(alpha: .10),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(topic.icon, color: topic.color),
-        ),
-        title: Text(
-          topic.title,
-          style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Color(0xFF102A43)),
-        ),
-        subtitle: Text(
-          topic.category,
-          style: TextStyle(fontSize: 12, color: topic.color, fontWeight: FontWeight.w600),
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        expandedCrossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(),
-          _detailSection('Simple Explanation', topic.simpleMeaning, Icons.info_outline),
-          _detailSection('Possible Causes', topic.possibleCauses, Icons.search_outlined),
-          _detailSection('Health & Usability Concerns', topic.healthConcerns, Icons.warning_amber_rounded),
-          _detailSection('Recommended Purification Method', topic.recommendedMethod, Icons.build_outlined),
+  Widget _buildVideoCard(BuildContext context, SolutionVideo video) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const teal = Color(0xFF087F8C);
 
-          const SizedBox(height: 8),
-          const Text('Step-by-Step Purification Process:',
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Color(0xFF102A43))),
-          const SizedBox(height: 6),
-          ...topic.stepByStepProcess.asMap().entries.map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CircleAvatar(
-                      radius: 10,
-                      backgroundColor: topic.color,
-                      child: Text('${e.key + 1}',
-                          style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(e.value,
-                            style: const TextStyle(fontSize: 13, height: 1.4))),
-                  ],
-                ),
-              )),
-
-          _detailSection('Suitable Filter Options', topic.filterOptions, Icons.filter_alt_outlined),
-          _detailSection('Maintenance Instructions', topic.maintenanceInstructions, Icons.cleaning_services_outlined),
-          _detailSection('When to Contact Certified Lab', topic.whenToContactLab, Icons.science_outlined),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailSection(String title, String content, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: const Color(0xFF087F8C)),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Color(0xFF102A43)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(content,
-              style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.4)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVideoCard(BuildContext context, VideoItem video) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _launchVideo(context, video.url),
+        onTap: () => _launchUrl(context, video.videoUrl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 140,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF102A43), Color(0xFF087F8C)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Image.network(
+                  video.thumbnailUrl,
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 140,
+                    color: const Color(0xFF102A43),
+                    child: const Center(
+                      child: Icon(Icons.play_circle_fill,
+                          size: 52, color: Colors.white70),
+                    ),
+                  ),
                 ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: .30),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.play_circle_fill, color: Colors.red, size: 16),
-                          const SizedBox(width: 5),
-                          Text(video.category,
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .55),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
                   ),
-                  Container(
-                    width: 52,
-                    height: 52,
+                  child: const Icon(Icons.play_arrow_rounded,
+                      size: 36, color: Colors.white),
+                ),
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .20),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+                      color: Colors.black.withValues(alpha: .65),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(Icons.play_arrow_rounded, size: 38, color: Colors.white),
-                  ),
-                  Positioned(
-                    right: 12,
-                    bottom: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: .50),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        video.duration,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
+                    child: Text(
+                      video.problemCategory,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             Padding(
               padding: const EdgeInsets.all(14),
@@ -1632,27 +1704,30 @@ class SolutionsPage extends StatelessWidget {
                 children: [
                   Text(
                     video.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: Color(0xFF102A43)),
+                        color: isDark ? Colors.white : const Color(0xFF102A43)),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   Text(
                     video.description,
-                    style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                        height: 1.4),
                   ),
                   const SizedBox(height: 10),
                   Row(
-                    children: const [
-                      Icon(Icons.open_in_new, size: 14, color: Color(0xFF087F8C)),
-                      SizedBox(width: 4),
+                    children: [
+                      Icon(Icons.play_circle_fill, size: 16, color: teal),
+                      const SizedBox(width: 6),
                       Text(
-                        'Watch on YouTube',
+                        'Watch Solution Video',
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF087F8C)),
+                            color: teal),
                       ),
                     ],
                   ),
@@ -1661,6 +1736,53 @@ class SolutionsPage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _parameterCard(
+      BuildContext context, String title, String value, String unit, Color color, IconData icon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF233554) : const Color(0xFFDCE8EE),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(title,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white70 : Colors.black54)),
+          const SizedBox(height: 2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: Text(value,
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF102A43)),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 3),
+              Text(unit,
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? Colors.white70 : Colors.black54)),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1772,8 +1894,8 @@ class SamplesPage extends StatelessWidget {
                           style: TextStyle(fontWeight: FontWeight.bold, color: isSafe ? Colors.green.shade800 : assessment == 'UNSAFE' ? Colors.red.shade800 : Colors.blueGrey.shade800)),
                     ),
                     const SizedBox(height: 8),
-                    Text('pH ${sample['ph']} (Demo)  •  TDS ${sample['tds']} ppm (Demo)'),
-                    Text('Turbidity ${sample['turbidity']} NTU (Hardware)  •  Flow ${flow.toStringAsFixed(2)} L/min (Hardware)'),
+                    Text('pH ${sample['ph']}  •  TDS ${sample['tds']} ppm'),
+                    Text('Turbidity ${sample['turbidity']} NTU  •  Flow ${flow.toStringAsFixed(2)} L/min'),
                     if (sample['time'] is String)
                       Padding(
                         padding: const EdgeInsets.only(top: 5),
@@ -1791,9 +1913,10 @@ class SamplesPage extends StatelessWidget {
 }
 
 class SettingsPage extends StatelessWidget {
-  final bool connected, refreshing;
+  final bool connected, refreshing, isDarkMode;
   final String connectionMessage;
   final VoidCallback onRefresh;
+  final VoidCallback onToggleTheme;
 
   const SettingsPage({
     super.key,
@@ -1801,18 +1924,27 @@ class SettingsPage extends StatelessWidget {
     required this.refreshing,
     required this.connectionMessage,
     required this.onRefresh,
+    required this.isDarkMode,
+    required this.onToggleTheme,
   });
 
   @override
   Widget build(BuildContext context) {
     const navy = Color(0xFF102A43);
     const teal = Color(0xFF087F8C);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
         backgroundColor: navy,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            onPressed: onToggleTheme,
+            icon: Icon(isDarkMode ? Icons.wb_sunny_outlined : Icons.nightlight_round),
+          ),
           IconButton(
             tooltip: 'Refresh connection',
             onPressed: refreshing ? null : onRefresh,
@@ -1842,8 +1974,37 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          const Text('Device & Connection',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: navy)),
+          Text('Appearance',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : navy)),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: Icon(
+                isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                color: teal,
+              ),
+              title: Text(isDarkMode ? 'Dark Mode' : 'Light Mode'),
+              subtitle: Text(isDarkMode ? 'Theme set to Dark Mode' : 'Theme set to Light Mode'),
+              trailing: IconButton(
+                icon: Icon(
+                  isDarkMode ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                  color: isDarkMode ? Colors.amber : navy,
+                ),
+                tooltip: isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+                onPressed: onToggleTheme,
+              ),
+              onTap: onToggleTheme,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Device & Connection',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : navy)),
           const SizedBox(height: 10),
           Card(
             child: ListTile(
@@ -1863,8 +2024,11 @@ class SettingsPage extends StatelessWidget {
             label: Text(refreshing ? 'Refreshing…' : 'Refresh Connection'),
           ),
           const SizedBox(height: 22),
-          const Text('About',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: navy)),
+          Text('About',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : navy)),
           const SizedBox(height: 10),
           const Card(
             child: Column(
@@ -1891,10 +2055,13 @@ class SettingsPage extends StatelessWidget {
           ),
 
           const SizedBox(height: 32),
-          const Center(
+          Center(
             child: Text(
               'Made by Tech in Air',
-              style: TextStyle(color: navy, fontSize: 14, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                  color: isDark ? Colors.white70 : navy,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(height: 12),
