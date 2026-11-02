@@ -244,27 +244,28 @@ class DemoProfile {
   final String name;
   final double ph;
   final double tds;
+  final double turbidity;
 
   const DemoProfile({
     required this.name,
     required this.ph,
     required this.tds,
+    required this.turbidity,
   });
 }
 
 const List<DemoProfile> demoProfiles = [
-  // SAFE profiles
-  DemoProfile(name: 'Clean Water', ph: 7.2, tds: 110.0),
-  DemoProfile(name: 'Purified Water', ph: 7.5, tds: 160.0),
-
-  // UNSAFE profiles
-  DemoProfile(name: 'High TDS Water', ph: 7.4, tds: 650.0),
-  DemoProfile(name: 'Acidic Water', ph: 5.6, tds: 420.0),
-  DemoProfile(name: 'Heavy Mineral Water', ph: 5.2, tds: 1250.0),
+  DemoProfile(name: 'Clean Water', ph: 7.2, tds: 110.0, turbidity: 2.0),
+  DemoProfile(name: 'Normal Water', ph: 7.5, tds: 160.0, turbidity: 3.0),
+  DemoProfile(name: 'High Turbidity', ph: 7.2, tds: 110.0, turbidity: 10.0),
+  DemoProfile(name: 'Low pH', ph: 5.6, tds: 110.0, turbidity: 2.0),
+  DemoProfile(name: 'High pH', ph: 9.0, tds: 110.0, turbidity: 2.0),
+  DemoProfile(name: 'High TDS', ph: 7.2, tds: 650.0, turbidity: 2.0),
 ];
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Timer? _connectionTimer;
+  Timer? _animationTimer;
   int selectedIndex = 0;
   double flowRate = 0;
   bool deviceConnected = false;
@@ -275,29 +276,45 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool hasRefreshedAtLeastOnce = false;
   Map<String, dynamic>? aiResult;
   String? connectionMessage;
+  String refreshStageMessage = 'Connecting to water monitoring system...';
   final List<Map<String, dynamic>> capturedSamples = [];
 
-  // Cycling through 5 test profiles (1..2 SAFE, 3..5 UNSAFE)
+  // Smooth progressive animation values during 6-second refresh check
+  double animatedPh = 0.0;
+  double animatedTds = 0.0;
+  double animatedTurbidity = 0.0;
+
+  // Cycling through 6 predefined conditions
   int _testProfileIndex = 0;
 
   DemoProfile get activeDemoProfile => demoProfiles[_testProfileIndex];
   double get activeTestPh => activeDemoProfile.ph;
   double get activeTestTds => activeDemoProfile.tds;
+  double get activeTestTurbidity => activeDemoProfile.turbidity;
   String get activeTestLabel => activeDemoProfile.name;
 
   WaterProfile get profile => liveProfile;
 
-  double get shownPh => hasRefreshedAtLeastOnce ? activeTestPh : 0;
-  double get shownTds => hasRefreshedAtLeastOnce ? activeTestTds : 0;
-  double get shownTurbidity => (deviceConnected && hasRefreshedAtLeastOnce) ? profile.turbidity : 0;
+  double get shownPh => (deviceConnected && hasRefreshedAtLeastOnce)
+      ? (refreshing ? animatedPh : activeTestPh)
+      : 0;
+
+  double get shownTds => (deviceConnected && hasRefreshedAtLeastOnce)
+      ? (refreshing ? animatedTds : activeTestTds)
+      : 0;
+
+  double get shownTurbidity => (deviceConnected && hasRefreshedAtLeastOnce)
+      ? (refreshing ? animatedTurbidity : activeTestTurbidity)
+      : 0;
+
   double get shownFlow => (deviceConnected && hasRefreshedAtLeastOnce) ? flowRate : 0;
 
   String get turbidityDisplayString => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? '${profile.turbidity.toStringAsFixed(1)} NTU'
+      ? '${shownTurbidity.toStringAsFixed(1)} NTU'
       : '--';
 
   String get flowDisplayString => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? '${flowRate.toStringAsFixed(2)} L/min'
+      ? '${shownFlow.toStringAsFixed(2)} L/min'
       : '--';
 
   @override
@@ -318,6 +335,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void dispose() {
     _connectionTimer?.cancel();
+    _animationTimer?.cancel();
     super.dispose();
   }
 
@@ -376,7 +394,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 name: activeTestLabel,
                 ph: activeTestPh,
                 tds: activeTestTds,
-                turbidity: turbidity.toDouble(),
+                turbidity: activeTestTurbidity,
                 recommendation:
                     'Run an analysis to receive a recommendation based on current readings.',
               );
@@ -419,43 +437,91 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         flowRate = 0;
       }
       connectionMessage = message;
-      refreshing = false;
+      if (showSpinner) refreshing = false;
     });
   }
 
   Future<void> _refreshProfile() async {
     if (refreshing || _connectionRequestInFlight) return;
 
+    _animationTimer?.cancel();
+
+    final nextIndex = !hasRefreshedAtLeastOnce
+        ? 0
+        : (_testProfileIndex + 1) % demoProfiles.length;
+    final targetProfile = demoProfiles[nextIndex];
+
+    final initialPh = (hasRefreshedAtLeastOnce && deviceConnected) ? activeTestPh : 0.0;
+    final initialTds = (hasRefreshedAtLeastOnce && deviceConnected) ? activeTestTds : 0.0;
+    final initialTurbidity = (hasRefreshedAtLeastOnce && deviceConnected) ? activeTestTurbidity : 0.0;
+
     setState(() {
       refreshing = true;
-
-      // Clear the previous profile's AI assessment.
       hasAnalysis = false;
       aiResult = null;
-
-      // Advance to the next water profile.
-      if (!hasRefreshedAtLeastOnce) {
-        hasRefreshedAtLeastOnce = true;
-        _testProfileIndex = 0;
-      } else {
-        _testProfileIndex =
-            (_testProfileIndex + 1) % demoProfiles.length;
-      }
+      refreshStageMessage = 'Connecting to water monitoring system...';
+      animatedPh = initialPh;
+      animatedTds = initialTds;
+      animatedTurbidity = initialTurbidity;
     });
-
-    // Smooth loading delay.
-    await Future.delayed(const Duration(milliseconds: 1400));
 
     await _refreshConnection(showSpinner: false);
 
-    if (deviceConnected) {
-      await _analyzeWaterSilent();
-    }
+    final startTime = DateTime.now().millisecondsSinceEpoch;
+    const totalDuration = 6000; // Exact 6 seconds total
+    const animationStart = 2000; // 2 seconds stage 1 loading
 
-    if (!mounted) return;
+    _animationTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
 
-    setState(() {
-      refreshing = false;
+      final elapsed = DateTime.now().millisecondsSinceEpoch - startTime;
+
+      if (elapsed < animationStart) {
+        // First stage (0 to 2 seconds): Professional loading animation
+        if (refreshStageMessage != 'Processing water parameters...') {
+          setState(() {
+            refreshStageMessage = 'Processing water parameters...';
+          });
+        }
+      } else if (elapsed < totalDuration) {
+        // Second stage (2 to 6 seconds): Smooth progressive number animation
+        final progress = ((elapsed - animationStart) / 4000.0).clamp(0.0, 1.0);
+
+        setState(() {
+          refreshStageMessage = 'Analyzing parameter levels...';
+          animatedPh = initialPh + (targetProfile.ph - initialPh) * progress;
+          animatedTds = initialTds + (targetProfile.tds - initialTds) * progress;
+          animatedTurbidity = initialTurbidity + (targetProfile.turbidity - initialTurbidity) * progress;
+        });
+      } else {
+        // At exactly 6 seconds: Complete animation, set final target values & run backend AI analysis
+        timer.cancel();
+        _testProfileIndex = nextIndex;
+        hasRefreshedAtLeastOnce = true;
+
+        animatedPh = targetProfile.ph;
+        animatedTds = targetProfile.tds;
+        animatedTurbidity = targetProfile.turbidity;
+
+        if (deviceConnected) {
+          _analyzeWaterSilent().then((_) {
+            if (mounted) {
+              setState(() {
+                refreshing = false;
+              });
+            }
+          });
+        } else {
+          if (mounted) {
+            setState(() {
+              refreshing = false;
+            });
+          }
+        }
+      }
     });
   }
 
@@ -474,7 +540,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             body: jsonEncode({
               'ph': activeTestPh,
               'tds': activeTestTds,
-              'turbidity': profile.turbidity,
+              'turbidity': activeTestTurbidity,
               'flow_rate': flowRate,
             }),
           )
@@ -637,6 +703,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         connected: deviceConnected,
         connectionMessage: connectionMessage ?? 'Checking device connection…',
         refreshing: refreshing,
+        refreshStageMessage: refreshStageMessage,
         hasRefreshedAtLeastOnce: hasRefreshedAtLeastOnce,
         sampleCount: capturedSamples.length,
         onRefresh: _refreshProfile,
@@ -728,6 +795,7 @@ class DashboardPage extends StatelessWidget {
   final double ph, tds, turbidity, flowRate;
   final bool connected, refreshing, hasRefreshedAtLeastOnce;
   final String connectionMessage;
+  final String refreshStageMessage;
   final int sampleCount;
   final VoidCallback onRefresh, onCapture, onOpenAnalysis;
 
@@ -741,6 +809,7 @@ class DashboardPage extends StatelessWidget {
     required this.connected,
     required this.connectionMessage,
     required this.refreshing,
+    required this.refreshStageMessage,
     required this.hasRefreshedAtLeastOnce,
     required this.sampleCount,
     required this.onRefresh,
@@ -788,20 +857,22 @@ class DashboardPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: teal),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                         strokeWidth: 2.5, color: teal),
                   ),
-                  SizedBox(width: 12),
-                  Text(
-                    'Checking water quality…',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      refreshStageMessage,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
                 ],
@@ -816,10 +887,10 @@ class DashboardPage extends StatelessWidget {
             mainAxisSpacing: 12,
             childAspectRatio: 1.42,
             children: [
-              SensorTile(title: 'pH Level', value: !hasRefreshedAtLeastOnce ? '00' : connected ? ph.toStringAsFixed(1) : '00', unit: 'pH', icon: Icons.science, color: const Color(0xFF6C63FF)),
-              SensorTile(title: 'TDS', value: !hasRefreshedAtLeastOnce ? '00' : connected ? (tds < 10 ? tds.toStringAsFixed(2) : tds.toStringAsFixed(0)) : '00', unit: 'ppm', icon: Icons.water_drop, color: teal),
-              SensorTile(title: 'Turbidity', value: !hasRefreshedAtLeastOnce ? '00' : connected ? turbidity.toStringAsFixed(1) : '00', unit: 'NTU*', icon: Icons.blur_on, color: const Color(0xFF0088CC)),
-              SensorTile(title: 'Flow Rate', value: !hasRefreshedAtLeastOnce ? '00' : connected ? flowRate.toStringAsFixed(2) : '00', unit: 'L/min*', icon: Icons.speed, color: const Color(0xFFEF8A17)),
+              SensorTile(title: 'pH Level', value: !connected ? '--' : !hasRefreshedAtLeastOnce ? '00' : ph.toStringAsFixed(1), unit: 'pH', icon: Icons.science, color: const Color(0xFF6C63FF)),
+              SensorTile(title: 'TDS', value: !connected ? '--' : !hasRefreshedAtLeastOnce ? '00' : (tds < 10 ? tds.toStringAsFixed(2) : tds.toStringAsFixed(0)), unit: 'ppm', icon: Icons.water_drop, color: teal),
+              SensorTile(title: 'Turbidity', value: !connected ? '--' : !hasRefreshedAtLeastOnce ? '00' : turbidity.toStringAsFixed(1), unit: 'NTU', icon: Icons.blur_on, color: const Color(0xFF0088CC)),
+              SensorTile(title: 'Flow Rate', value: !connected ? '--' : !hasRefreshedAtLeastOnce ? '00' : flowRate.toStringAsFixed(2), unit: 'L/min', icon: Icons.speed, color: const Color(0xFFEF8A17)),
             ],
           ),
           const SizedBox(height: 16),
