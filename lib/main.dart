@@ -1286,14 +1286,23 @@ class SolutionsPage extends StatelessWidget {
     const teal = Color(0xFF087F8C);
 
     final isTurbidityValid = connected &&
-        hasAnalysis &&
-        aiResult != null &&
-        aiResult!['turbidity'] != null &&
+        (aiResult == null || aiResult!['turbidity'] != null) &&
         turbidity <= 50.0 &&
         turbidity >= 0.0;
 
     final relevantVideos =
         _getRelevantVideos(ph, tds, turbidity, isTurbidityValid);
+
+    debugPrint('=== DEBUG SolutionsPage.build ===');
+    debugPrint(
+        'Connected: $connected, Refreshed: $hasRefreshedAtLeastOnce, HasAnalysis: $hasAnalysis');
+    debugPrint(
+        'Actual Values -> pH: $ph, TDS: $tds, Turbidity: $turbidity, Flow: $flowRate');
+    debugPrint('isTurbidityValid: $isTurbidityValid');
+    debugPrint('Relevant Videos Count: ${relevantVideos.length}');
+    for (final v in relevantVideos) {
+      debugPrint('   Video Title: "${v.title}" | URL: ${v.videoUrl}');
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -1315,10 +1324,7 @@ class SolutionsPage extends StatelessWidget {
           ),
         ],
       ),
-      body: !connected ||
-              !hasAnalysis ||
-              aiResult == null ||
-              !hasRefreshedAtLeastOnce
+      body: !connected || !hasRefreshedAtLeastOnce
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(28),
