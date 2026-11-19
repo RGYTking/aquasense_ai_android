@@ -279,15 +279,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String refreshStageMessage = 'Connecting to water monitoring system...';
   final List<Map<String, dynamic>> capturedSamples = [];
 
-  // Smooth progressive animation values during 6-second refresh check
   double animatedPh = 0.0;
   double animatedTds = 0.0;
   double animatedTurbidity = 0.0;
 
-  // Cycling through 6 predefined conditions
-  int _testProfileIndex = 0;
+  int _testProfileIndex = -1;
 
-  DemoProfile get activeDemoProfile => demoProfiles[_testProfileIndex];
+  DemoProfile get activeDemoProfile =>
+      demoProfiles[_testProfileIndex < 0 ? 0 : _testProfileIndex];
   double get activeTestPh => activeDemoProfile.ph;
   double get activeTestTds => activeDemoProfile.tds;
   double get activeTestTurbidity => activeDemoProfile.turbidity;
@@ -296,36 +295,43 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   WaterProfile get profile => liveProfile;
 
   double get shownPh => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? (refreshing ? animatedPh : activeTestPh)
+      ? (refreshing ? animatedPh : liveProfile.ph)
       : 0;
 
   double get shownTds => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? (refreshing ? animatedTds : activeTestTds)
+      ? (refreshing ? animatedTds : liveProfile.tds)
       : 0;
 
   double get shownTurbidity => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? (refreshing ? animatedTurbidity : activeTestTurbidity)
+      ? (refreshing ? animatedTurbidity : liveProfile.turbidity)
       : 0;
 
-  double get shownFlow => (deviceConnected && hasRefreshedAtLeastOnce) ? flowRate : 0;
+  double get shownFlow =>
+      (deviceConnected && hasRefreshedAtLeastOnce) ? flowRate : 0;
 
-  String get turbidityDisplayString => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? '${shownTurbidity.toStringAsFixed(1)} NTU'
-      : '--';
+  String get turbidityDisplayString =>
+      (deviceConnected && hasRefreshedAtLeastOnce)
+          ? '${shownTurbidity.toStringAsFixed(1)} NTU'
+          : '--';
 
-  String get flowDisplayString => (deviceConnected && hasRefreshedAtLeastOnce)
-      ? '${shownFlow.toStringAsFixed(2)} L/min'
-      : '--';
+  String get flowDisplayString =>
+      (deviceConnected && hasRefreshedAtLeastOnce)
+          ? '${shownFlow.toStringAsFixed(2)} L/min'
+          : '--';
 
   @override
   void initState() {
     super.initState();
     _checkInitialConnection();
-    _connectionTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!refreshing && hasRefreshedAtLeastOnce) {
-        _refreshConnection(showSpinner: false);
-      }
-    });
+
+    _connectionTimer = Timer.periodic(
+      const Duration(seconds: 5),
+          (_) {
+        if (!refreshing) {
+          _refreshConnection(showSpinner: false);
+        }
+      },
+    );
   }
 
   Future<void> _checkInitialConnection() async {
@@ -339,6 +345,60 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     super.dispose();
   }
 
+  Future<Map<String, dynamic>?> _getBackendSensorStatus() async {
+    final response = await http
+        .get(Uri.parse('$backendUrl/api/sensors'))
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      throw Exception('Sensor status HTTP ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Invalid sensor status response');
+    }
+    return decoded;
+  }
+
+  WaterProfile? _profileFromBackendData(dynamic data) {
+    if (data is! Map<String, dynamic>) return null;
+
+    final ph = data['ph'];
+    final tds = data['tds'];
+    final turbidity = data['turbidity'];
+    final flow = data['flow_rate'];
+
+    if (ph is! num ||
+        tds is! num ||
+        turbidity is! num ||
+        flow is! num ||
+        !ph.toDouble().isFinite ||
+        !tds.toDouble().isFinite ||
+        !turbidity.toDouble().isFinite ||
+        !flow.toDouble().isFinite ||
+        ph < 0 ||
+        ph > 14 ||
+        tds < 0 ||
+        turbidity < 0 ||
+        flow < 0) {
+      return null;
+    }
+
+    final name = data['profile_name'] is String
+        ? data['profile_name'] as String
+        : 'Water Profile';
+
+    return WaterProfile(
+      name: name,
+      ph: ph.toDouble(),
+      tds: tds.toDouble(),
+      turbidity: turbidity.toDouble(),
+      recommendation:
+      'Run an analysis to receive a recommendation based on current readings.',
+    );
+  }
+
   Future<void> _refreshConnection({bool showSpinner = true}) async {
     if (_connectionRequestInFlight) return;
     _connectionRequestInFlight = true;
@@ -350,67 +410,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     bool connected = false;
     double latestFlow = 0;
     String message = 'Device disconnected. Waiting for fresh sensor data.';
-    WaterProfile nextProfile = liveProfile;
+    WaterProfile? backendProfile;
 
     try {
-      final response = await http
-          .get(Uri.parse('$backendUrl/api/sensors'))
-          .timeout(const Duration(seconds: 3));
+      final decoded = await _getBackendSensorStatus();
+      final data = decoded?['data'];
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+      connected = decoded?['status'] == 'connected' &&
+          decoded?['device_online'] == true;
 
-        if (decoded is Map<String, dynamic>) {
-          final data = decoded['data'];
-
-          connected = decoded['status'] == 'connected' &&
-              data is Map<String, dynamic> &&
-              (decoded['device_online'] == null ||
-                  decoded['device_online'] == true);
-
-          if (connected) {
-            final ph = data['ph'];
-            final tds = data['tds'];
-            final turbidity = data['turbidity'];
-            final flow = data['flow_rate'];
-
-            if (ph is! num ||
-                tds is! num ||
-                turbidity is! num ||
-                flow is! num ||
-                !ph.toDouble().isFinite ||
-                !tds.toDouble().isFinite ||
-                !turbidity.toDouble().isFinite ||
-                !flow.toDouble().isFinite ||
-                ph < 0 || ph > 14 ||
-                tds < 0 ||
-                turbidity < 0 ||
-                flow < 0) {
-              connected = false;
-              message = 'Device disconnected. Incomplete sensor data.';
-            } else {
-              latestFlow = flow.toDouble();
-              nextProfile = WaterProfile(
-                name: activeTestLabel,
-                ph: activeTestPh,
-                tds: activeTestTds,
-                turbidity: activeTestTurbidity,
-                recommendation:
-                    'Run an analysis to receive a recommendation based on current readings.',
-              );
-              message = 'Connected';
-            }
-          } else if (decoded['status'] == 'stale' ||
-              decoded['device_online'] == false) {
-            message = 'Device disconnected. Latest sensor data is outdated.';
-          } else if (decoded['status'] == 'no_data') {
-            message = 'Device disconnected. No sensor data received yet.';
-          } else {
-            message = 'Device disconnected or backend status unavailable.';
-          }
+      if (connected) {
+        backendProfile = _profileFromBackendData(data);
+        if (backendProfile == null) {
+          connected = false;
+          message = 'Device connected, but backend readings are invalid.';
+        } else {
+          latestFlow = backendProfile.ph == 0
+              ? 0
+              : ((data as Map<String, dynamic>)['flow_rate'] as num).toDouble();
+          message = 'Connected';
         }
+      } else if (decoded?['status'] == 'stale' ||
+          decoded?['device_online'] == false) {
+        message = 'Device disconnected. Latest sensor data is outdated.';
+      } else if (decoded?['status'] == 'no_data') {
+        message = 'Device disconnected. No sensor data received yet.';
       } else {
-        message = 'Backend unavailable (HTTP ${response.statusCode}).';
+        message = 'Device disconnected or backend status unavailable.';
       }
     } catch (_) {
       message = 'Unable to check device status. Check internet/backend.';
@@ -422,11 +448,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     setState(() {
       deviceConnected = connected;
-      if (connected) {
-        liveProfile = nextProfile;
+      if (connected && backendProfile != null) {
+        liveProfile = backendProfile;
         flowRate = latestFlow;
+        if (_testProfileIndex < 0) {
+          final found = demoProfiles.indexWhere(
+                  (p) => p.name == backendProfile!.name);
+          if (found >= 0) _testProfileIndex = found;
+        }
       } else {
-        // Clear cached hardware sensor readings when offline or stale
         liveProfile = const WaterProfile(
           name: 'Offline Profile',
           ph: 0,
@@ -444,127 +474,198 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Future<void> _refreshProfile() async {
     if (refreshing || _connectionRequestInFlight) return;
 
-    _animationTimer?.cancel();
-
-    final nextIndex = !hasRefreshedAtLeastOnce
-        ? 0
-        : (_testProfileIndex + 1) % demoProfiles.length;
-    final targetProfile = demoProfiles[nextIndex];
-
-    final initialPh = (hasRefreshedAtLeastOnce && deviceConnected) ? activeTestPh : 0.0;
-    final initialTds = (hasRefreshedAtLeastOnce && deviceConnected) ? activeTestTds : 0.0;
-    final initialTurbidity = (hasRefreshedAtLeastOnce && deviceConnected) ? activeTestTurbidity : 0.0;
-
+    // A fresh physical ESP8266 heartbeat is required before selecting a profile.
     setState(() {
       refreshing = true;
       hasAnalysis = false;
       aiResult = null;
-      refreshStageMessage = 'Connecting to water monitoring system...';
-      animatedPh = initialPh;
-      animatedTds = initialTds;
-      animatedTurbidity = initialTurbidity;
+      refreshStageMessage = 'Checking device connection...';
     });
 
-    await _refreshConnection(showSpinner: false);
+    Map<String, dynamic>? sensorStatus;
+    try {
+      sensorStatus = await _getBackendSensorStatus();
+    } catch (_) {
+      sensorStatus = null;
+    }
 
-    final startTime = DateTime.now().millisecondsSinceEpoch;
-    const totalDuration = 6000; // Exact 6 seconds total
-    const animationStart = 2000; // 2 seconds stage 1 loading
+    final isConnected = sensorStatus != null &&
+        sensorStatus['status'] == 'connected' &&
+        sensorStatus['device_online'] == true;
 
-    _animationTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
+    if (!isConnected) {
+      if (!mounted) return;
+      setState(() {
+        deviceConnected = false;
+        refreshing = false;
+        connectionMessage =
+        'Device disconnected. Connect ESP8266 and send fresh sensor data first.';
+      });
+      _showMessage('Device is offline. Cannot select a profile.');
+      return;
+    }
+
+    final nextIndex = (_testProfileIndex + 1) % demoProfiles.length;
+    final targetProfile = demoProfiles[nextIndex];
+
+    final previousPh = hasRefreshedAtLeastOnce ? liveProfile.ph : 0.0;
+    final previousTds = hasRefreshedAtLeastOnce ? liveProfile.tds : 0.0;
+    final previousTurbidity =
+    hasRefreshedAtLeastOnce ? liveProfile.turbidity : 0.0;
+
+    setState(() {
+      deviceConnected = true;
+      refreshing = true;
+      animatedPh = previousPh;
+      animatedTds = previousTds;
+      animatedTurbidity = previousTurbidity;
+      refreshStageMessage = 'Sending selected profile to backend...';
+    });
+
+    try {
+      final selectResponse = await http
+          .post(
+        Uri.parse('$backendUrl/api/profile/select'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({'profile_name': targetProfile.name}),
+      )
+          .timeout(const Duration(seconds: 20));
+
+      if (selectResponse.statusCode != 200) {
+        throw Exception(
+            'Profile selection failed (HTTP ${selectResponse.statusCode}): ${selectResponse.body}');
       }
 
-      final elapsed = DateTime.now().millisecondsSinceEpoch - startTime;
+      final selectionDecoded = jsonDecode(selectResponse.body);
+      if (selectionDecoded is! Map<String, dynamic> ||
+          selectionDecoded['status'] != 'selected') {
+        throw Exception('Backend did not confirm profile selection.');
+      }
 
-      if (elapsed < animationStart) {
-        // First stage (0 to 2 seconds): Professional loading animation
-        if (refreshStageMessage != 'Processing water parameters...') {
-          setState(() {
-            refreshStageMessage = 'Processing water parameters...';
-          });
-        }
-      } else if (elapsed < totalDuration) {
-        // Second stage (2 to 6 seconds): Smooth progressive number animation
-        final progress = ((elapsed - animationStart) / 4000.0).clamp(0.0, 1.0);
+      final selectedData = selectionDecoded['profile'];
+      final selectedProfile = _profileFromBackendData(selectedData);
+      if (selectedProfile == null ||
+          selectedProfile.name != targetProfile.name) {
+        throw Exception('Backend returned an invalid selected profile.');
+      }
 
-        setState(() {
-          refreshStageMessage = 'Analyzing parameter levels...';
-          animatedPh = initialPh + (targetProfile.ph - initialPh) * progress;
-          animatedTds = initialTds + (targetProfile.tds - initialTds) * progress;
-          animatedTurbidity = initialTurbidity + (targetProfile.turbidity - initialTurbidity) * progress;
-        });
-      } else {
-        // At exactly 6 seconds: Complete animation, set final target values & run backend AI analysis
-        timer.cancel();
-        _testProfileIndex = nextIndex;
-        hasRefreshedAtLeastOnce = true;
+      // Fetch the current profile endpoint too. This verifies the same payload
+      // that the ESP8266 polls for the OLED.
+      final currentResponse = await http
+          .get(Uri.parse('$backendUrl/api/profile/current'))
+          .timeout(const Duration(seconds: 20));
 
-        animatedPh = targetProfile.ph;
-        animatedTds = targetProfile.tds;
-        animatedTurbidity = targetProfile.turbidity;
+      if (currentResponse.statusCode != 200) {
+        throw Exception(
+            'Could not verify current profile (HTTP ${currentResponse.statusCode}).');
+      }
 
-        if (deviceConnected) {
-          _analyzeWaterSilent().then((_) {
-            if (mounted) {
+      final currentDecoded = jsonDecode(currentResponse.body);
+      final verifiedProfile = _profileFromBackendData(currentDecoded);
+      if (verifiedProfile == null ||
+          verifiedProfile.name != targetProfile.name) {
+        throw Exception('Current backend profile did not match the selection.');
+      }
+
+      final startTime = DateTime.now();
+      const totalDuration = Duration(seconds: 6);
+      const animationStart = Duration(seconds: 2);
+
+      _animationTimer?.cancel();
+      _animationTimer =
+          Timer.periodic(const Duration(milliseconds: 50), (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
+
+            final elapsed = DateTime.now().difference(startTime);
+
+            if (elapsed < animationStart) {
               setState(() {
-                refreshing = false;
+                refreshStageMessage = 'Processing water parameters...';
+              });
+            } else if (elapsed < totalDuration) {
+              final progress = ((elapsed - animationStart).inMilliseconds /
+                  4000.0)
+                  .clamp(0.0, 1.0);
+
+              setState(() {
+                refreshStageMessage = 'Updating water readings...';
+                animatedPh =
+                    previousPh + (verifiedProfile.ph - previousPh) * progress;
+                animatedTds =
+                    previousTds + (verifiedProfile.tds - previousTds) * progress;
+                animatedTurbidity = previousTurbidity +
+                    (verifiedProfile.turbidity - previousTurbidity) * progress;
+              });
+            } else {
+              timer.cancel();
+              _testProfileIndex = nextIndex;
+              hasRefreshedAtLeastOnce = true;
+
+              setState(() {
+                liveProfile = verifiedProfile;
+                flowRate = (currentDecoded['flow_rate'] as num).toDouble();
+                animatedPh = verifiedProfile.ph;
+                animatedTds = verifiedProfile.tds;
+                animatedTurbidity = verifiedProfile.turbidity;
+                refreshStageMessage = 'Profile updated successfully.';
+              });
+
+              _analyzeWaterSilent().whenComplete(() {
+                if (mounted) {
+                  setState(() => refreshing = false);
+                }
               });
             }
           });
-        } else {
-          if (mounted) {
-            setState(() {
-              refreshing = false;
-            });
-          }
-        }
-      }
-    });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        refreshing = false;
+        connectionMessage = 'Profile update failed: $e';
+      });
+      _showMessage('Could not update the selected profile. Check backend deployment.');
+    }
   }
 
   Future<void> _analyzeWaterSilent() async {
-    if (!deviceConnected) return;
+    if (!deviceConnected || !hasRefreshedAtLeastOnce) return;
 
     Map<String, dynamic>? result;
 
     try {
       final response = await http
           .post(
-            Uri.parse('$backendUrl/api/analyze'),
-            headers: const {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'ph': activeTestPh,
-              'tds': activeTestTds,
-              'turbidity': activeTestTurbidity,
-              'flow_rate': flowRate,
-            }),
-          )
-          .timeout(const Duration(seconds: 8));
+        Uri.parse('$backendUrl/api/analyze'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'ph': liveProfile.ph,
+          'tds': liveProfile.tds,
+          'turbidity': liveProfile.turbidity,
+          'flow_rate': flowRate,
+        }),
+      )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-
-        if (decoded is Map<String, dynamic>) {
-          result = decoded;
-        }
+        if (decoded is Map<String, dynamic>) result = decoded;
       }
-    } catch (e) {
+    } catch (_) {
       result = null;
     }
 
-    // Never generate a local SAFE/UNSAFE result.
-    // Use only the backend assessment.
-    aiResult = result;
-    hasAnalysis = true;
+    if (!mounted) return;
+    setState(() {
+      aiResult = result;
+      hasAnalysis = true;
+    });
   }
 
   Future<void> _analyzeWater() async {
-    if (!deviceConnected || aiLoading) return;
+    if (!deviceConnected || !hasRefreshedAtLeastOnce || aiLoading) return;
 
     setState(() {
       aiLoading = true;
@@ -577,22 +678,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     try {
       final response = await http
           .post(
-            Uri.parse('$backendUrl/api/analyze'),
-            headers: const {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'ph': shownPh,
-              'tds': shownTds,
-              'turbidity': shownTurbidity,
-              'flow_rate': shownFlow,
-            }),
-          )
-          .timeout(const Duration(seconds: 12));
+        Uri.parse('$backendUrl/api/analyze'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'ph': liveProfile.ph,
+          'tds': liveProfile.tds,
+          'turbidity': liveProfile.turbidity,
+          'flow_rate': flowRate,
+        }),
+      )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
-
         if (decoded is Map<String, dynamic> &&
             (decoded['assessment'] == 'Safe' ||
                 decoded['assessment'] == 'Unsafe' ||
@@ -605,7 +703,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     if (!mounted) return;
-
     setState(() {
       aiResult = result;
       aiLoading = false;
@@ -614,22 +711,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   void _captureSample() {
-    if (!deviceConnected) {
-      _showMessage('Connect the device before saving a sample.');
+    if (!deviceConnected || !hasRefreshedAtLeastOnce) {
+      _showMessage('Connect the device and refresh readings before saving.');
       return;
     }
+
     capturedSamples.insert(0, {
-      'name': activeTestLabel,
-      'ph': shownPh,
-      'tds': shownTds,
-      'turbidity': shownTurbidity,
-      'flow': shownFlow,
+      'name': liveProfile.name,
+      'ph': liveProfile.ph,
+      'tds': liveProfile.tds,
+      'turbidity': liveProfile.turbidity,
+      'flow': flowRate,
       'assessment': hasAnalysis ? _assessmentLabel(aiResult) : 'NOT ANALYZED',
       'time': DateTime.now().toLocal().toString().substring(0, 16),
       'isTest': true,
     });
+
     setState(() {});
-    _showMessage('Sample saved ($activeTestLabel).');
+    _showMessage('Sample saved (${liveProfile.name}).');
   }
 
   Future<void> _deleteSample(int index) async {
@@ -1263,7 +1362,7 @@ List<SolutionVideo> _getRelevantVideos(
       const SolutionVideo(
         title: 'Turbidity Water Treatment Solution',
         description:
-            'How sediment pre-filtration and clarification remove suspended particles and reduce turbidity.',
+        'How sediment pre-filtration and clarification remove suspended particles and reduce turbidity.',
         videoUrl: 'https://youtu.be/Bp07m5BEGok',
         thumbnailUrl: 'https://img.youtube.com/vi/Bp07m5BEGok/hqdefault.jpg',
         problemCategory: 'Turbidity Unsafe Solution',
@@ -1277,7 +1376,7 @@ List<SolutionVideo> _getRelevantVideos(
       const SolutionVideo(
         title: 'High TDS Water Treatment Solution',
         description:
-            'How Reverse Osmosis (RO) filtration systems reduce total dissolved solids in drinking water.',
+        'How Reverse Osmosis (RO) filtration systems reduce total dissolved solids in drinking water.',
         videoUrl: 'https://youtu.be/B7qB62Msems',
         thumbnailUrl: 'https://img.youtube.com/vi/B7qB62Msems/hqdefault.jpg',
         problemCategory: 'TDS Unsafe Solution',
@@ -1362,7 +1461,7 @@ class SolutionsPage extends StatelessWidget {
         turbidity >= 0.0;
 
     final relevantVideos =
-        _getRelevantVideos(ph, tds, turbidity, isTurbidityValid);
+    _getRelevantVideos(ph, tds, turbidity, isTurbidityValid);
 
     debugPrint('=== DEBUG SolutionsPage.build ===');
     debugPrint(
@@ -1386,278 +1485,278 @@ class SolutionsPage extends StatelessWidget {
             onPressed: refreshing ? null : onRefresh,
             icon: refreshing
                 ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            )
                 : const Icon(Icons.refresh),
           ),
         ],
       ),
       body: !connected || !hasRefreshedAtLeastOnce
           ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                        !connected
-                            ? Icons.wifi_off
-                            : Icons.analytics_outlined,
-                        size: 54,
-                        color: teal),
-                    const SizedBox(height: 14),
-                    Text(
-                      !connected
-                          ? 'Device Disconnected'
-                          : 'Connect the device and run water analysis',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: navy),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: onOpenAnalysis,
-                      icon: const Icon(Icons.analytics_outlined),
-                      label: const Text('Open AI Analysis'),
-                    ),
-                  ],
-                ),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                  !connected
+                      ? Icons.wifi_off
+                      : Icons.analytics_outlined,
+                  size: 54,
+                  color: teal),
+              const SizedBox(height: 14),
+              Text(
+                !connected
+                    ? 'Device Disconnected'
+                    : 'Connect the device and run water analysis',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: navy),
               ),
-            )
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: onOpenAnalysis,
+                icon: const Icon(Icons.analytics_outlined),
+                label: const Text('Open AI Analysis'),
+              ),
+            ],
+          ),
+        ),
+      )
           : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (refreshing) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 14, horizontal: 18),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: teal.withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: teal),
-                    ),
-                    child: const Row(
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: teal),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Checking water quality…',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (refreshing) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  vertical: 14, horizontal: 18),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: teal.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: teal),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: teal),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Checking water quality…',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
                     ),
                   ),
                 ],
-
-                // 1. Water Parameters
-                const Text('Water Parameters',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: navy)),
-                const SizedBox(height: 10),
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 1.5,
-                  children: [
-                    _parameterCard(context, 'pH Level', ph.toStringAsFixed(1),
-                        'pH', const Color(0xFF6C63FF), Icons.science),
-                    _parameterCard(
-                        context,
-                        'TDS',
-                        tds < 10
-                            ? tds.toStringAsFixed(2)
-                            : tds.toStringAsFixed(0),
-                        'ppm',
-                        teal,
-                        Icons.water_drop),
-                    _parameterCard(
-                        context,
-                        'Turbidity',
-                        isTurbidityValid
-                            ? turbidity.toStringAsFixed(1)
-                            : '--',
-                        'NTU',
-                        const Color(0xFF0088CC),
-                        Icons.blur_on),
-                    _parameterCard(
-                        context,
-                        'Flow Rate',
-                        flowRate.toStringAsFixed(2),
-                        'L/min',
-                        const Color(0xFFEF8A17),
-                        Icons.speed),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // 2. Individual Parameter Analysis
-                const Text('Individual Parameter Analysis',
-                    style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: navy)),
-                const SizedBox(height: 10),
-
-                // pH Analysis Card
-                _buildAnalysisCard(
-                  context,
-                  title: 'pH Level (${ph.toStringAsFixed(1)})',
-                  icon: Icons.science_outlined,
-                  iconColor: const Color(0xFF6C63FF),
-                  finding: ph < 6.5
-                      ? 'Low pH detected (${ph.toStringAsFixed(1)}): Water is acidic (below safe 6.5–8.5 range).'
-                      : ph > 8.5
-                          ? 'High pH detected (${ph.toStringAsFixed(1)}): Water is alkaline (above safe 6.5–8.5 range).'
-                          : 'pH level (${ph.toStringAsFixed(1)}) is in optimal balance (6.5–8.5 range).',
-                  concern: ph < 6.5
-                      ? 'Acidic water can cause metal pipe corrosion and leaching.'
-                      : ph > 8.5
-                          ? 'Highly alkaline water may taste bitter and cause scale buildup.'
-                          : 'pH balance is optimal.',
-                  treatment: ph < 6.5
-                      ? 'Calcite neutralizer media filtration system recommended.'
-                      : ph > 8.5
-                          ? 'Select an appropriate pH correction system based on testing.'
-                          : 'No pH adjustment required.',
-                ),
-                const SizedBox(height: 10),
-
-                // TDS Analysis Card
-                _buildAnalysisCard(
-                  context,
-                  title:
-                      'Total Dissolved Solids (${tds.toStringAsFixed(0)} mg/L)',
-                  icon: Icons.water_drop_outlined,
-                  iconColor: teal,
-                  finding: tds > 500
-                      ? 'Elevated TDS detected (${tds.toStringAsFixed(0)} mg/L): Exceeds 500 mg/L threshold.'
-                      : 'TDS (${tds.toStringAsFixed(0)} mg/L) is within the safe 500 mg/L threshold.',
-                  concern: tds > 500
-                      ? 'High concentration of dissolved mineral salts and inorganic ions.'
-                      : 'Total Dissolved Solids level is normal.',
-                  treatment: tds > 500
-                      ? 'Reverse Osmosis (RO) purification system recommended.'
-                      : 'No TDS treatment required.',
-                ),
-                const SizedBox(height: 10),
-
-                // Turbidity Analysis Card
-                _buildAnalysisCard(
-                  context,
-                  title: isTurbidityValid
-                      ? 'Turbidity (${turbidity.toStringAsFixed(1)} NTU)'
-                      : 'Turbidity (Unavailable)',
-                  icon: Icons.blur_on,
-                  iconColor: const Color(0xFF0088CC),
-                  finding: !isTurbidityValid
-                      ? 'Turbidity sensor reading is unavailable or uncalibrated.'
-                      : turbidity > 5.0
-                          ? 'Elevated Turbidity detected (${turbidity.toStringAsFixed(1)} NTU): Exceeds 5.0 NTU threshold.'
-                          : 'Turbidity (${turbidity.toStringAsFixed(1)} NTU) is within the safe 5.0 NTU threshold.',
-                  concern: !isTurbidityValid
-                      ? 'Probe is uncalibrated or disconnected.'
-                      : turbidity > 5.0
-                          ? 'High count of suspended silt, clay, or organic particles.'
-                          : 'Water clarity is optimal.',
-                  treatment: !isTurbidityValid
-                      ? 'Submerge and calibrate the optical turbidity probe in water before evaluating.'
-                      : turbidity > 5.0
-                          ? 'Multi-stage sediment pre-filtration (spun/melt-blown cartridges).'
-                          : 'No sediment pre-filtration required.',
-                ),
-                const SizedBox(height: 16),
-
-                // 3. Recommended Treatment
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.auto_awesome, color: teal),
-                            SizedBox(width: 8),
-                            Text('Recommended Treatment',
-                                style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    color: navy)),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _recommendationText(
-                              aiResult,
-                              'All measured water parameters (pH, TDS, and Turbidity) are within configured safe operational limits. Maintain routine filter inspection and clean storage practices.'),
-                          style: const TextStyle(fontSize: 14, height: 1.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // 4. Treatment Solution Videos (Shown ONLY when relevant issue videos exist)
-                if (relevantVideos.isNotEmpty) ...[
-                  const Text('Treatment Solution Videos',
-                      style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: navy)),
-                  const SizedBox(height: 10),
-                  ...relevantVideos
-                      .map((video) => _buildVideoCard(context, video)),
-                  const SizedBox(height: 12),
-                ],
-
-                // 5. Working Refresh Check button
-                FilledButton.icon(
-                  onPressed: refreshing ? null : onRefresh,
-                  icon: refreshing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.refresh),
-                  label: Text(refreshing ? 'Checking…' : 'Refresh Check'),
-                ),
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
+          ],
+
+          // 1. Water Parameters
+          const Text('Water Parameters',
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: navy)),
+          const SizedBox(height: 10),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 1.5,
+            children: [
+              _parameterCard(context, 'pH Level', ph.toStringAsFixed(1),
+                  'pH', const Color(0xFF6C63FF), Icons.science),
+              _parameterCard(
+                  context,
+                  'TDS',
+                  tds < 10
+                      ? tds.toStringAsFixed(2)
+                      : tds.toStringAsFixed(0),
+                  'ppm',
+                  teal,
+                  Icons.water_drop),
+              _parameterCard(
+                  context,
+                  'Turbidity',
+                  isTurbidityValid
+                      ? turbidity.toStringAsFixed(1)
+                      : '--',
+                  'NTU',
+                  const Color(0xFF0088CC),
+                  Icons.blur_on),
+              _parameterCard(
+                  context,
+                  'Flow Rate',
+                  flowRate.toStringAsFixed(2),
+                  'L/min',
+                  const Color(0xFFEF8A17),
+                  Icons.speed),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 2. Individual Parameter Analysis
+          const Text('Individual Parameter Analysis',
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: navy)),
+          const SizedBox(height: 10),
+
+          // pH Analysis Card
+          _buildAnalysisCard(
+            context,
+            title: 'pH Level (${ph.toStringAsFixed(1)})',
+            icon: Icons.science_outlined,
+            iconColor: const Color(0xFF6C63FF),
+            finding: ph < 6.5
+                ? 'Low pH detected (${ph.toStringAsFixed(1)}): Water is acidic (below safe 6.5–8.5 range).'
+                : ph > 8.5
+                ? 'High pH detected (${ph.toStringAsFixed(1)}): Water is alkaline (above safe 6.5–8.5 range).'
+                : 'pH level (${ph.toStringAsFixed(1)}) is in optimal balance (6.5–8.5 range).',
+            concern: ph < 6.5
+                ? 'Acidic water can cause metal pipe corrosion and leaching.'
+                : ph > 8.5
+                ? 'Highly alkaline water may taste bitter and cause scale buildup.'
+                : 'pH balance is optimal.',
+            treatment: ph < 6.5
+                ? 'Calcite neutralizer media filtration system recommended.'
+                : ph > 8.5
+                ? 'Select an appropriate pH correction system based on testing.'
+                : 'No pH adjustment required.',
+          ),
+          const SizedBox(height: 10),
+
+          // TDS Analysis Card
+          _buildAnalysisCard(
+            context,
+            title:
+            'Total Dissolved Solids (${tds.toStringAsFixed(0)} mg/L)',
+            icon: Icons.water_drop_outlined,
+            iconColor: teal,
+            finding: tds > 500
+                ? 'Elevated TDS detected (${tds.toStringAsFixed(0)} mg/L): Exceeds 500 mg/L threshold.'
+                : 'TDS (${tds.toStringAsFixed(0)} mg/L) is within the safe 500 mg/L threshold.',
+            concern: tds > 500
+                ? 'High concentration of dissolved mineral salts and inorganic ions.'
+                : 'Total Dissolved Solids level is normal.',
+            treatment: tds > 500
+                ? 'Reverse Osmosis (RO) purification system recommended.'
+                : 'No TDS treatment required.',
+          ),
+          const SizedBox(height: 10),
+
+          // Turbidity Analysis Card
+          _buildAnalysisCard(
+            context,
+            title: isTurbidityValid
+                ? 'Turbidity (${turbidity.toStringAsFixed(1)} NTU)'
+                : 'Turbidity (Unavailable)',
+            icon: Icons.blur_on,
+            iconColor: const Color(0xFF0088CC),
+            finding: !isTurbidityValid
+                ? 'Turbidity sensor reading is unavailable or uncalibrated.'
+                : turbidity > 5.0
+                ? 'Elevated Turbidity detected (${turbidity.toStringAsFixed(1)} NTU): Exceeds 5.0 NTU threshold.'
+                : 'Turbidity (${turbidity.toStringAsFixed(1)} NTU) is within the safe 5.0 NTU threshold.',
+            concern: !isTurbidityValid
+                ? 'Probe is uncalibrated or disconnected.'
+                : turbidity > 5.0
+                ? 'High count of suspended silt, clay, or organic particles.'
+                : 'Water clarity is optimal.',
+            treatment: !isTurbidityValid
+                ? 'Submerge and calibrate the optical turbidity probe in water before evaluating.'
+                : turbidity > 5.0
+                ? 'Multi-stage sediment pre-filtration (spun/melt-blown cartridges).'
+                : 'No sediment pre-filtration required.',
+          ),
+          const SizedBox(height: 16),
+
+          // 3. Recommended Treatment
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.auto_awesome, color: teal),
+                      SizedBox(width: 8),
+                      Text('Recommended Treatment',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: navy)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _recommendationText(
+                        aiResult,
+                        'All measured water parameters (pH, TDS, and Turbidity) are within configured safe operational limits. Maintain routine filter inspection and clean storage practices.'),
+                    style: const TextStyle(fontSize: 14, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 4. Treatment Solution Videos (Shown ONLY when relevant issue videos exist)
+          if (relevantVideos.isNotEmpty) ...[
+            const Text('Treatment Solution Videos',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: navy)),
+            const SizedBox(height: 10),
+            ...relevantVideos
+                .map((video) => _buildVideoCard(context, video)),
+            const SizedBox(height: 12),
+          ],
+
+          // 5. Working Refresh Check button
+          FilledButton.icon(
+            onPressed: refreshing ? null : onRefresh,
+            icon: refreshing
+                ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            )
+                : const Icon(Icons.refresh),
+            label: Text(refreshing ? 'Checking…' : 'Refresh Check'),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 
   Widget _buildAnalysisCard(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Color iconColor,
-    required String finding,
-    required String concern,
-    required String treatment,
-  }) {
+      BuildContext context, {
+        required String title,
+        required IconData icon,
+        required Color iconColor,
+        required String finding,
+        required String concern,
+        required String treatment,
+      }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const navy = Color(0xFF102A43);
 
