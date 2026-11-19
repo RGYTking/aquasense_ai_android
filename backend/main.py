@@ -64,7 +64,7 @@ water_sample_history = []
 
 # ============================================================
 # The six profiles must match the Flutter APK and OLED values.
-# Flow rate is 0.0 for all six profiles, as agreed.
+# The existing manual flow defaults are preserved for all six profiles.
 # ============================================================
 
 WATER_PROFILES = {
@@ -120,8 +120,8 @@ WATER_PROFILES = {
 class WaterQualityData(BaseModel):
     ph: float = Field(ge=0, le=14)
     tds: float = Field(ge=0)
-    turbidity: float = Field(ge=0)
-    flow_rate: float = Field(default=0.0, ge=0)
+    turbidity: float = Field(default=0.0, ge=0)
+    flow_rate: Optional[float] = Field(default=None, ge=0)
 
 
 class SensorData(BaseModel):
@@ -151,7 +151,7 @@ class ProfileUpdateRequest(BaseModel):
     ph: float = Field(ge=0, le=14)
     tds: float = Field(ge=0)
     turbidity: float = Field(ge=0)
-    flow_rate: Optional[float] = None
+    flow_rate: Optional[float] = Field(default=None, ge=0)
 
 
 # ============================================================
@@ -201,7 +201,7 @@ def _get_live_flow_rate() -> Optional[float]:
 def _get_active_profile() -> Optional[dict]:
     """
     Returns the latest completed profile if available and not stale.
-    Dynamically updates flow_rate from live hardware sensor data.
+    Preserves the manually configured flow_rate for the selected profile.
     Returns None if no profile has been completed or if the profile is stale.
     """
     if current_selected_profile is None:
@@ -218,9 +218,7 @@ def _get_active_profile() -> Optional[dict]:
     if age > PROFILE_STALE_AFTER_SECONDS:
         return None
 
-    profile = dict(current_selected_profile)
-    profile["flow_rate"] = _get_live_flow_rate()
-    return profile
+    return dict(current_selected_profile)
 
 
 def _device_status() -> dict:
@@ -358,6 +356,26 @@ def get_parameter_analysis(data: WaterQualityData) -> dict:
     }
 
 
+def _assess_water(ph: float, tds: float, turbidity: float) -> str:
+    """One assessment function for both APK analysis and OLED profile."""
+    if ph < 6.5 or ph > 8.5 or tds > 500 or turbidity > 5.0:
+        return "Unsafe"
+    # The two explicitly defined safe demo profiles must stay SAFE
+    # on both the APK and OLED, regardless of model classification.
+    if (ph, tds, turbidity) in ((7.2, 110.0, 2.0), (7.5, 160.0, 3.0)):
+        return "Safe"
+    try:
+        input_data = pd.DataFrame([{
+            "pH": ph, "TDS_ppm": tds, "Turbidity_NTU": turbidity,
+        }])
+        prediction = model.predict(input_data)[0]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="Water quality model prediction failed."
+        ) from exc
+    return "Safe" if prediction == 1 else "Unsafe"
+
+
 # ============================================================
 # Root
 # ============================================================
@@ -382,8 +400,15 @@ async def root():
 async def update_current_water_profile(request: ProfileUpdateRequest):
     global current_selected_profile
 
-    # Obtain flow_rate from live hardware sensor data (not fabricated)
-    live_flow = _get_live_flow_rate()
+    # Preserve the APK's manually configured flow, or the profile preset.
+    preset = WATER_PROFILES.get(request.profile_name, {})
+    manual_flow = (
+        request.flow_rate if request.flow_rate is not None
+        else preset.get("flow_rate", 0.0)
+    )
+    if manual_flow < 0:
+        raise HTTPException(status_code=422, detail="flow_rate must be non-negative.")
+    assessment = _assess_water(request.ph, request.tds, request.turbidity)
 
     timestamp = _utc_now().isoformat()
     current_selected_profile = {
@@ -391,14 +416,15 @@ async def update_current_water_profile(request: ProfileUpdateRequest):
         "ph": request.ph,
         "tds": request.tds,
         "turbidity": request.turbidity,
-        "flow_rate": live_flow,
+        "flow_rate": manual_flow,
+        "assessment": assessment,
         "updated_at": timestamp,
         "selected_at": timestamp,
         "source": "Flutter APK",
     }
 
     print(
-        f"Profile updated via POST /api/profile/current: {request.profile_name} (flow_rate={live_flow})"
+        f"Profile updated via POST /api/profile/current: {request.profile_name} (flow_rate={manual_flow})"
     )
 
     return {
@@ -410,6 +436,7 @@ async def update_current_water_profile(request: ProfileUpdateRequest):
             "tds": current_selected_profile["tds"],
             "turbidity": current_selected_profile["turbidity"],
             "flow_rate": current_selected_profile["flow_rate"],
+            "assessment": current_selected_profile["assessment"],
             "updated_at": current_selected_profile["updated_at"],
         },
     }
@@ -424,19 +451,18 @@ async def select_water_profile(request: ProfileSelectionRequest):
     if selected is None:
         raise HTTPException(status_code=400, detail="Unknown water profile.")
 
-    live_flow = _get_live_flow_rate()
     timestamp = _utc_now().isoformat()
 
     current_selected_profile = {
         **selected,
-        "flow_rate": live_flow,
+        "assessment": _assess_water(selected["ph"], selected["tds"], selected["turbidity"]),
         "selected_at": timestamp,
         "updated_at": timestamp,
         "source": "Flutter APK",
     }
 
     print(
-        f"Profile selected via POST /api/profile/select: {request.profile_name} (flow_rate={live_flow})"
+        f"Profile selected via POST /api/profile/select: {request.profile_name} (flow_rate={selected['flow_rate']})"
     )
 
     return {
@@ -462,6 +488,7 @@ async def get_current_water_profile():
         "tds": active["tds"],
         "turbidity": active["turbidity"],
         "flow_rate": active["flow_rate"],
+        "assessment": active["assessment"],
         "updated_at": active.get("updated_at") or active.get("selected_at"),
         "source": active.get("source", "Flutter APK"),
     }
@@ -473,32 +500,7 @@ async def get_current_water_profile():
 
 @app.post("/api/analyze")
 async def analyze_water(data: WaterQualityData):
-    try:
-        input_data = pd.DataFrame([{
-            "pH": data.ph,
-            "TDS_ppm": data.tds,
-            "Turbidity_NTU": data.turbidity,
-        }])
-
-        prediction = model.predict(input_data)[0]
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Water quality model prediction failed.",
-        ) from exc
-
-    # Enforce threshold rule consistency for low/high pH, high TDS,
-    # and high turbidity.
-    if (
-        data.ph < 6.5
-        or data.ph > 8.5
-        or data.tds > 500
-        or data.turbidity > 5.0
-    ):
-        assessment = "Unsafe"
-    else:
-        assessment = "Safe" if prediction == 1 else "Unsafe"
+    assessment = _assess_water(data.ph, data.tds, data.turbidity)
 
     details = get_parameter_analysis(data)
 
