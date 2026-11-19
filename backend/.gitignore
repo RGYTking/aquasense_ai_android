@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.log
+water_quality_model_candidate.pkl
+water_quality_dataset1.csv
+train_model.py
