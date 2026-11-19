@@ -257,7 +257,6 @@ class DemoProfile {
 const List<DemoProfile> demoProfiles = [
   DemoProfile(name: 'Clean Water', ph: 7.2, tds: 110.0, turbidity: 2.0),
   DemoProfile(name: 'Normal Water', ph: 7.5, tds: 160.0, turbidity: 3.0),
-  DemoProfile(name: 'High Turbidity', ph: 7.2, tds: 110.0, turbidity: 10.0),
   DemoProfile(name: 'Low pH', ph: 5.6, tds: 110.0, turbidity: 2.0),
   DemoProfile(name: 'High pH', ph: 9.0, tds: 110.0, turbidity: 2.0),
   DemoProfile(name: 'High TDS', ph: 7.2, tds: 650.0, turbidity: 2.0),
@@ -391,7 +390,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       tds: tds.toDouble(),
       turbidity: turbidity.toDouble(),
       recommendation:
-          'Run an analysis to receive a recommendation based on current readings.',
+      'Run an analysis to receive a recommendation based on current readings.',
     );
   }
 
@@ -421,7 +420,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           connected = false;
           message = 'Device connected, but backend readings are invalid.';
         } else {
-          final rawFlow = (data as Map<String, dynamic>)['flow_rate'];
+          // Read flow from the actual sensor payload, not the selected profile.
+          final rawSensor = decoded?['sensor_data'];
+          final rawFlow = rawSensor is Map<String, dynamic>
+              ? rawSensor['flow_rate'] : null;
           latestFlow = (rawFlow is num && rawFlow.toDouble().isFinite)
               ? rawFlow.toDouble()
               : null;
@@ -446,21 +448,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     setState(() {
       deviceConnected = connected;
       if (connected && backendProfile != null) {
-        liveProfile = backendProfile;
-        flowRate = latestFlow;
-        if (_testProfileIndex < 0) {
-          final found = demoProfiles.indexWhere(
-              (p) => p.name == backendProfile!.name);
-          if (found >= 0) _testProfileIndex = found;
+        // Device connection comes from sensors; selected demo pH/TDS come
+        // from the completed profile. Never overwrite them on heartbeat.
+        if (!hasRefreshedAtLeastOnce && !refreshing) {
+          liveProfile = backendProfile;
         }
+        // Flow is obtained only from the real/manual sensor payload.
+        flowRate = latestFlow;
       } else {
-        liveProfile = const WaterProfile(
-          name: 'Offline Profile',
-          ph: 0,
-          tds: 0,
-          turbidity: 0,
-          recommendation: '',
-        );
+        if (!hasRefreshedAtLeastOnce) {
+          liveProfile = const WaterProfile(
+            name: 'Offline Profile',
+            ph: 0,
+            tds: 0,
+            turbidity: 0,
+            recommendation: '',
+          );
+        }
         flowRate = null;
       }
       connectionMessage = message;
@@ -496,11 +500,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         deviceConnected = false;
         refreshing = false;
         connectionMessage =
-            'Device disconnected. Connect ESP8266 and send fresh sensor data first.';
+        'Device disconnected. Connect ESP8266 and send fresh sensor data first.';
       });
       _showMessage('Device is offline. Cannot select a profile.');
       return;
     }
+
+    // /api/sensors.data may contain a selected profile.
+    // /api/sensors.sensor_data is the actual incoming hardware payload.
+    final sensorData = sensorStatus['sensor_data'];
+    final currentTurbidity = sensorData is Map<String, dynamic>
+        ? sensorData['turbidity'] : null;
+    final currentFlow = sensorData is Map<String, dynamic>
+        ? sensorData['flow_rate'] : null;
+    if (currentTurbidity is! num ||
+        !currentTurbidity.toDouble().isFinite ||
+        currentTurbidity < 0) {
+      if (!mounted) return;
+      setState(() => refreshing = false);
+      _showMessage('Valid live turbidity is required before refreshing.');
+      return;
+    }
+    // The backend flow field is manually configured; do not invent it.
+    final double? selectedFlow = currentFlow is num &&
+        currentFlow.toDouble().isFinite && currentFlow >= 0
+        ? currentFlow.toDouble() : null;
+    final double sensorTurbidity = currentTurbidity.toDouble();
 
     final nextIndex = (_testProfileIndex + 1) % demoProfiles.length;
     final targetProfile = demoProfiles[nextIndex];
@@ -508,7 +533,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final previousPh = hasRefreshedAtLeastOnce ? liveProfile.ph : 0.0;
     final previousTds = hasRefreshedAtLeastOnce ? liveProfile.tds : 0.0;
     final previousTurbidity =
-        hasRefreshedAtLeastOnce ? liveProfile.turbidity : 0.0;
+    hasRefreshedAtLeastOnce ? liveProfile.turbidity : 0.0;
 
     setState(() {
       deviceConnected = true;
@@ -526,106 +551,107 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _animationTimer?.cancel();
     _animationTimer =
         Timer.periodic(const Duration(milliseconds: 50), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
 
-      final elapsed = DateTime.now().difference(startTime);
+          final elapsed = DateTime.now().difference(startTime);
 
-      if (elapsed < animationStart) {
-        setState(() {
-          refreshStageMessage = 'Processing water parameters...';
-        });
-      } else if (elapsed < totalDuration) {
-        final progress =
+          if (elapsed < animationStart) {
+            setState(() {
+              refreshStageMessage = 'Processing water parameters...';
+            });
+          } else if (elapsed < totalDuration) {
+            final progress =
             ((elapsed - animationStart).inMilliseconds / 4000.0).clamp(0.0, 1.0);
 
-        setState(() {
-          refreshStageMessage = 'Updating water readings...';
-          animatedPh =
-              previousPh + (targetProfile.ph - previousPh) * progress;
-          animatedTds =
-              previousTds + (targetProfile.tds - previousTds) * progress;
-          animatedTurbidity = previousTurbidity +
-              (targetProfile.turbidity - previousTurbidity) * progress;
-        });
-      } else {
-        timer.cancel();
+            setState(() {
+              refreshStageMessage = 'Updating water readings...';
+              animatedPh =
+                  previousPh + (targetProfile.ph - previousPh) * progress;
+              animatedTds =
+                  previousTds + (targetProfile.tds - previousTds) * progress;
+              animatedTurbidity = previousTurbidity +
+                  (sensorTurbidity - previousTurbidity) * progress;
+            });
+          } else {
+            timer.cancel();
 
-        // 6-second refresh completed! Post completed profile to POST /api/profile/current
-        setState(() {
-          refreshStageMessage = 'Synchronizing profile to backend...';
-        });
+            // 6-second refresh completed! Post completed profile to POST /api/profile/current
+            setState(() {
+              refreshStageMessage = 'Synchronizing profile to backend...';
+            });
 
-        try {
-          final postResponse = await http
-              .post(
+            try {
+              final postResponse = await http
+                  .post(
                 Uri.parse('$backendUrl/api/profile/current'),
                 headers: const {'Content-Type': 'application/json'},
                 body: jsonEncode({
                   'profile_name': targetProfile.name,
                   'ph': targetProfile.ph,
                   'tds': targetProfile.tds,
-                  'turbidity': targetProfile.turbidity,
+                  'turbidity': sensorTurbidity,
+                  if (selectedFlow != null) 'flow_rate': selectedFlow,
                 }),
               )
-              .timeout(const Duration(seconds: 20));
+                  .timeout(const Duration(seconds: 20));
 
-          if (postResponse.statusCode != 200) {
-            throw Exception(
-                'Profile synchronization failed (HTTP ${postResponse.statusCode}): ${postResponse.body}');
-          }
+              if (postResponse.statusCode != 200) {
+                throw Exception(
+                    'Profile synchronization failed (HTTP ${postResponse.statusCode}): ${postResponse.body}');
+              }
 
-          final postDecoded = jsonDecode(postResponse.body);
-          if (postDecoded is! Map<String, dynamic> ||
-              (postDecoded['status'] != 'updated' &&
-                  postDecoded['status'] != 'selected')) {
-            throw Exception('Backend did not confirm profile synchronization.');
-          }
+              final postDecoded = jsonDecode(postResponse.body);
+              if (postDecoded is! Map<String, dynamic> ||
+                  (postDecoded['status'] != 'updated' &&
+                      postDecoded['status'] != 'selected')) {
+                throw Exception('Backend did not confirm profile synchronization.');
+              }
 
-          final profileData = postDecoded['profile'] ?? postDecoded;
-          final double? flowVal = (profileData['flow_rate'] != null &&
-                  profileData['flow_rate'] is num)
-              ? (profileData['flow_rate'] as num).toDouble()
-              : null;
+              final profileData = postDecoded['profile'] ?? postDecoded;
+              final double? flowVal = profileData is Map &&
+                  profileData['flow_rate'] is num
+                  ? (profileData['flow_rate'] as num).toDouble()
+                  : selectedFlow;
 
-          _testProfileIndex = nextIndex;
-          hasRefreshedAtLeastOnce = true;
+              _testProfileIndex = nextIndex;
+              hasRefreshedAtLeastOnce = true;
 
-          if (!mounted) return;
-          setState(() {
-            liveProfile = WaterProfile(
-              name: targetProfile.name,
-              ph: targetProfile.ph,
-              tds: targetProfile.tds,
-              turbidity: targetProfile.turbidity,
-              recommendation:
+              if (!mounted) return;
+              setState(() {
+                liveProfile = WaterProfile(
+                  name: targetProfile.name,
+                  ph: targetProfile.ph,
+                  tds: targetProfile.tds,
+                  turbidity: sensorTurbidity,
+                  recommendation:
                   'Run an analysis to receive a recommendation based on current readings.',
-            );
-            flowRate = flowVal;
-            animatedPh = targetProfile.ph;
-            animatedTds = targetProfile.tds;
-            animatedTurbidity = targetProfile.turbidity;
-            refreshStageMessage = 'Profile updated successfully.';
-          });
+                );
+                flowRate = flowVal;
+                animatedPh = targetProfile.ph;
+                animatedTds = targetProfile.tds;
+                animatedTurbidity = sensorTurbidity;
+                refreshStageMessage = 'Profile updated successfully.';
+              });
 
-          _analyzeWaterSilent().whenComplete(() {
-            if (mounted) {
-              setState(() => refreshing = false);
+              _analyzeWaterSilent().whenComplete(() {
+                if (mounted) {
+                  setState(() => refreshing = false);
+                }
+              });
+            } catch (e) {
+              if (!mounted) return;
+              setState(() {
+                refreshing = false;
+                connectionMessage = 'Profile synchronization failed: $e';
+              });
+              _showMessage(
+                  'Could not synchronize profile to backend. Check connection.');
             }
-          });
-        } catch (e) {
-          if (!mounted) return;
-          setState(() {
-            refreshing = false;
-            connectionMessage = 'Profile synchronization failed: $e';
-          });
-          _showMessage(
-              'Could not synchronize profile to backend. Check connection.');
-        }
-      }
-    });
+          }
+        });
   }
 
   Future<void> _analyzeWaterSilent() async {
@@ -2247,3 +2273,4 @@ class SettingsPage extends StatelessWidget {
     );
   }
 }
+
